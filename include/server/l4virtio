@@ -536,17 +536,9 @@ public:
    * \return Pointer to the region containing the given region,
    *         NULL if none is found.
    */
-  Mem_region const *find(l4_uint64_t base, l4_uint32_t size) const
+  Mem_region *find(l4_uint64_t base, l4_uint32_t size) const
   {
     return _find(base, size);
-  }
-
-  /**
-   * \copydoc find()
-   */
-  Mem_region *find(l4_uint64_t base, l4_uint32_t size)
-  {
-    return const_cast<Mem_region *>(_find(base, size));
   }
 
   /**
@@ -598,7 +590,7 @@ public:
   void load_desc(Virtqueue::Desc const &desc, Request_processor const *p,
                  ARG *data) const
   {
-    Mem_region const *r = find(desc.addr.get(), desc.len);
+    Mem_region *r = find(desc.addr.get(), desc.len);
     if (L4_UNLIKELY(!r))
       throw Bad_descriptor(p, Bad_descriptor::Bad_address);
 
@@ -606,7 +598,7 @@ public:
   }
 
 private:
-  Mem_region const *_find(l4_uint64_t base, l4_uint32_t size) const
+  Mem_region *_find(l4_uint64_t base, l4_uint32_t size) const
   {
     for (unsigned i = 0; i < _free; ++i)
       if (_l[i].contains(base, size))
