@@ -228,23 +228,84 @@ public:
   void disable()
   { _desc = 0; }
 
+  enum
+  {
+    Desc_align  = 4,
+    Avail_align = 1,
+    Used_align  = 2,
+  };
+
   /**
    * Calculate the total size for a virtqueue of the given dimensions.
+   *
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
-   * \param align  The alignment for the used ring (must be a power of 2).
-   * \return the total size in bytes of the queue data structures.
+   *
+   * \return The total size in bytes of the queue data structures.
    */
-  unsigned long total_size(unsigned num, l4_uint32_t align) const
+  static unsigned long total_size(unsigned num)
   {
-    unsigned long size = num * sizeof(Desc);
-    size += 4 + num * 2; // size of available ring
-    size += 2;
-    size = (size + align - 1) & ~(align - 1);
-    size += 4 + num * sizeof(Used_elem);
-    size += 2;
-    return size;
+    static_assert(Desc_align >= Avail_align,
+                  "virtqueue alignment assumptions broken");
+    return l4_round_size(desc_size(num) + avail_size(num), Used_align)
+           + used_size(num);
   }
+
+  /**
+   * Calculate the size of the descriptor table for `num` entries.
+   *
+   * \param num  The number of entries in the descriptor table.
+   *
+   * \returns  The size in bytes needed for a descriptor table with
+   *           `num` entries.
+   */
+  static unsigned long desc_size(unsigned num)
+  { return num * 16; }
+
+  /**
+   * Get the alignment in zero LSBs needed for the descriptor table.
+   *
+   * \returns  The alignment in zero LSBs needed for a descriptor table.
+   */
+  static unsigned long desc_align()
+  { return Desc_align; }
+
+  /**
+   * Calculate the size of the available ring for `num` entries.
+   *
+   * \param num  The number of entries in the available ring.
+   * \returns  The size in bytes needed for an available ring with
+   *           `num` entries.
+   */
+  static unsigned long avail_size(unsigned num)
+  { return 2 * num + 6; }
+
+  /**
+   * Get the alignment in zero LSBs needed for the available ring.
+   *
+   * \returns  The alignment in zero LSBs needed for an available ring.
+   */
+  static unsigned long avail_align()
+  { return Avail_align; }
+
+  /**
+   * Calculate the size of the used ring for `num` entries.
+   *
+   * \param num  The number of entries in the used ring.
+   *
+   * \returns  The size in bytes needed for an used ring with
+   *           `num` entries.
+   */
+  static unsigned long used_size(unsigned num)
+  { return 8 * num + 6; }
+
+  /**
+   * Get the alignment in zero LSBs needed for the used ring.
+   *
+   * \returns  The alignment in zero LSBs needed for an used ring.
+   */
+  static unsigned long used_align()
+  { return Used_align; }
 
   /**
    * Calculate the total size of this virtqueue.
@@ -254,39 +315,79 @@ public:
   unsigned long total_size() const
   {
     return ((char *) _used - (char *) _desc)
-            + 6 + num() * sizeof(Used_elem);
+            + used_size(num());
   }
 
   /**
+   * Get the offset of the available ring from the descriptor table.
+   */
+  unsigned long avail_offset() const
+  { return (char const *)_avail - (char const *)_desc; }
+
+  /**
+   * Get the offset of the used ring from the descriptor table.
+   */
+  unsigned long used_offset() const
+  { return (char const *)_used - (char const *)_desc; }
+
+  /**
    * \brief Enable this queue.
+   *
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
-   * \param align  The alignment for the used ring (must be a power of 2).
-   * \param base   The base address for the queue data structure.
+   * \param desc   The address of the descriptor table. (Must be
+   *               #Desc_align aligned and at least `desc_size(num)` bytes
+   *               in size.)
+   * \param avail  The address of the available ring. (Must be
+   *               #Avail_align aligned and at least `avail_size(num)` bytes
+   *               in size.)
+   * \param used   The address of the used ring. (Must be #Used_align aligned
+   *               and at least `used_size(num)` bytes in size.)
    *
    * Due to the data type of the descriptors, the queue can have a
    * maximum size of 2^16.
    */
-  void setup(unsigned num, l4_uint32_t align, void *base)
+  void setup(unsigned num, void *desc, void *avail, void *used)
   {
     if (num > 0x10000)
       throw L4::Runtime_error(-L4_EINVAL, "Queue too large.");
 
     _idx_mask = num - 1;
-    _desc = (Desc*)base;
-    _avail = (Avail*)&_desc[num];
-    uintptr_t al_mask = align - 1;
-    _used = (Used*)((((l4_addr_t)&_avail->ring[num])
-                    + sizeof(l4_uint16_t) + al_mask) & ~al_mask);
+    _desc = (Desc*)desc;
+    _avail = (Avail*)avail;
+    _used = (Used*)used;
 
     _current_avail = 0;
 
-    L4Re::Util::Dbg().printf("VQ[%p]: num=%d align=%x d:%p a:%p u:%p\n",
-                             this, num, align, _desc, _avail, _used);
+    L4Re::Util::Dbg().printf("VQ[%p]: num=%d d:%p a:%p u:%p\n",
+                             this, num, _desc, _avail, _used);
+  }
+
+  /**
+   * \brief Enable this queue.
+   *
+   * \param num    The number of entries in the descriptor table, the
+   *               available ring, and the used ring (must be a power of 2).
+   * \param ring   The base address for the queue data structure. The memory
+   *               block at `ring` must be at least `total_size(num)` bytes
+   *               in size and have an alignment of #Desc_align
+   *               (desc_align()) bits.
+   *
+   *
+   * Due to the data type of the descriptors, the queue can have a
+   * maximum size of 2^16.
+   */
+  void setup_simple(unsigned num, void *ring)
+  {
+    l4_addr_t desc = reinterpret_cast<l4_addr_t>(ring);
+    l4_addr_t avail = l4_round_size(desc + desc_size(num), Avail_align);
+    l4_addr_t used = l4_round_size(avail + avail_size(num), Used_align);
+    setup(num, (void *)desc, (void *)avail, (void *)used);
   }
 
   /**
    * \brief Dump descriptors for this queue.
+   *
    * \pre the queue must be in working state.
    */
   void dump(Desc const *d) const
@@ -294,6 +395,7 @@ public:
 
   /**
    * \brief Test if this queue is in working state.
+   *
    * \return true when the queue is in working state, false else.
    */
   bool ready() const
@@ -305,7 +407,9 @@ public:
 
    /**
    * \brief Get the no IRQ flag of this queue.
+   *
    * \pre queue must be in working state.
+   *
    * \return true if the guest does not want to get IRQs (currently).
    */
   bool no_notify_guest() const
@@ -315,7 +419,9 @@ public:
 
    /**
    * \brief Get the no notify flag of this queue.
+   *
    * \pre queue must be in working state.
+   *
    * \return true if the host does not want to get IRQs (currently).
    */
   bool no_notify_host() const
@@ -325,6 +431,7 @@ public:
 
   /**
    * Set the no-notify flag for this queue
+   *
    * \pre Queue must be in a working state.
    */
   void no_notify_host(bool value)
@@ -334,14 +441,17 @@ public:
 
   /**
    * Get available index from available ring (for debugging).
+   *
    * \pre Queue must be in a working state.
-   * \return current index  in the available ring (shared
+   *
+   * \return current index in the available ring (shared
    *         between device model and device driver).
    */
   l4_uint16_t get_avail_idx() const { return _avail->idx; }
 
   /**
    * Get tail-available index stored in local state (for debugging).
+   *
    * \return current tail index for the the available ring.
    */
   l4_uint16_t get_tail_avail_idx() const { return _current_avail; }
@@ -371,20 +481,17 @@ public:
 
   Virtqueue() : _next_free(Eoq) {}
 
-  /**
-   * Initialise this virtqueue.
+ /**
+   * Initialise the descriptor table and the index structures
+   * of this queue.
    *
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
-   * \param align  The alignment for the used ring (must be a power of 2).
-   * \param base   The base address for the queue data structure.
    *
-   * This function sets up the memory and initialises the freelist.
+   * \pre The queue must be set up correctly with setup() or setup_simple().
    */
-  void init_queue(unsigned num, l4_uint32_t align, void *base)
+  void initialize_rings(unsigned num)
   {
-    setup(num, align, base);
-
     _used->idx = 0;
     _avail->idx = 0;
 
@@ -393,6 +500,43 @@ public:
       _desc[d].next = d + 1;
     _desc[num - 1].next = Eoq;
     _next_free = 0;
+  }
+
+  /**
+   * Initialise this virtqueue.
+   *
+   * \param num    The number of entries in the descriptor table, the
+   *               available ring, and the used ring (must be a power of 2).
+   * \param desc   The address of the descriptor table. (Must be
+   *               #Desc_align aligned and at least `desc_size(num)` bytes
+   *               in size.)
+   * \param avail  The address of the available ring. (Must be
+   *               #Avail_align aligned and at least `avail_size(num)` bytes
+   *               in size.)
+   * \param used   The address of the used ring. (Must be #Used_align aligned
+   *               and at least `used_size(num)` bytes in size.)
+   *
+   * This function sets up the memory and initialises the freelist.
+   */
+  void init_queue(unsigned num, void *desc, void *avail, void *used)
+  {
+    setup(num, desc, avail, used);
+    initialize_rings(num);
+  }
+
+  /**
+   * Initialise this virtqueue.
+   *
+   * \param num    The number of entries in the descriptor table, the
+   *               available ring, and the used ring (must be a power of 2).
+   * \param base   The base address for the queue data structure.
+   *
+   * This function sets up the memory and initialises the freelist.
+   */
+  void init_queue(unsigned num, void *base)
+  {
+    setup_simple(num, base);
+    initialize_rings(num);
   }
 
 

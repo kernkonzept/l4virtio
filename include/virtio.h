@@ -97,28 +97,59 @@ enum L4_virtio_irq_status
  */
 typedef struct l4virtio_config_hdr_t
 {
-  l4_uint32_t magic;          ///< magic value (must be 'virt').
-  l4_uint32_t version;        ///< VIRTIO version
-  l4_uint32_t device;         ///< device ID
-  l4_uint32_t vendor;         ///< vendor ID
-  l4_uint32_t num_queues;     ///< number of virtqueues
-  l4_uint32_t queues_offset;  ///< offset of virtqueue config array
-  l4_uint32_t dev_cfg_offset; ///< offset of device specific config
-  l4_uint32_t generation;     ///< generation counter
+  l4_uint32_t magic;          /**< magic value (must be 'virt'). */
+  l4_uint32_t version;        /**< VIRTIO version */
+  l4_uint32_t device;         /**< device ID */
+  l4_uint32_t vendor;         /**< vendor ID */
+
+  l4_uint32_t dev_features;   /**< device features windows selected by device_feature_sel */
+  l4_uint32_t dev_features_sel;
+  l4_uint32_t _res1[2];
+
+  l4_uint32_t driver_features;
+  l4_uint32_t driver_features_sel;
+
+  /* some L4virtio specific members ... */
+  l4_uint32_t num_queues;     /**< number of virtqueues */
+  l4_uint32_t queues_offset;  /**< offset of virtqueue config array */
+
+  /* must start at 0x30 (per virtio-mmio layout) */
+  l4_uint32_t queue_sel;
+  l4_uint32_t queue_num_max;
+  l4_uint32_t queue_num;
+  l4_uint32_t _res3[2];
+  l4_uint32_t queue_ready;
+  l4_uint32_t _res4[2];
+
+  l4_uint32_t queue_notify;
+  l4_uint32_t _res5[3];
+
+  l4_uint32_t irq_status;
+  l4_uint32_t irq_ack;
+  l4_uint32_t _res6[2];
 
   /**
    * Device status register (read-only). The register must be written
    * using l4virtio_set_status().
+   *
+   * must be at offset 0x70 (virtio-mmio)
    */
   l4_uint32_t status;
-  l4_uint32_t irq_status;  ///< IRQ status (currently unused).
+  l4_uint32_t _res7[3];
 
-  l4_uint32_t host_features[8];  ///< host feature bitmap
-  l4_uint32_t guest_features[8]; ///< guest feature bitmap
-  /**
-   * Guest page size (used for PFN to address translation).
-   */
-  l4_uint32_t guest_page_size;
+  l4_uint64_t queue_desc;
+  l4_uint32_t _res8[2];
+  l4_uint64_t queue_avail;
+  l4_uint32_t _res9[2];
+  l4_uint64_t queue_used;
+
+  /* use the unused space here for device and driver feature bitmaps */
+  l4_uint32_t dev_features_map[8];
+  l4_uint32_t driver_features_map[8];
+
+  l4_uint32_t _res10[5];
+
+  l4_uint32_t generation;
 } l4virtio_config_hdr_t;
 
 /**
@@ -127,14 +158,23 @@ typedef struct l4virtio_config_hdr_t
  */
 typedef struct l4virtio_config_queue_t
 {
-  /// maximum number of descriptors supported by this queue (read)
+  /** R: maximum number of descriptors supported by this queue*/
   l4_uint16_t num_max;
-  /// number of descriptors configured for this queue (read-write)
+  /** RW: number of descriptors configured for this queue */
   l4_uint16_t num;
-  /// alignment of the used ring (read-write)
-  l4_uint32_t align;
-  /// start page frame of the queue (read-write)
-  l4_uint32_t pfn;
+
+  /** RW: queue ready flag (read-write) */
+  l4_uint16_t ready;
+
+  /** W: Event index to be used for device notifications (device to host) */
+  l4_uint16_t driver_notify_index;
+
+  l4_uint64_t desc_addr;  /**< W: address of descriptor table */
+  l4_uint64_t avail_addr; /**< W: address of available ring */
+  l4_uint64_t used_addr;  /**< W: address of used ring */
+
+  /** R: Event index to be used by the driver (driver to device) */
+  l4_uint16_t device_notify_index;
 } l4virtio_config_queue_t;
 
 EXTERN_C_BEGIN
@@ -158,7 +198,7 @@ l4virtio_config_queues(l4virtio_config_hdr_t const *cfg)
 L4_INLINE void *
 l4virtio_device_config(l4virtio_config_hdr_t const *cfg)
 {
-  return (void *)(((l4_addr_t)cfg) + cfg->dev_cfg_offset);
+  return (void *)(((l4_addr_t)cfg) + 0x100);
 }
 
 

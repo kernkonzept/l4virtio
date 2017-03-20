@@ -60,8 +60,8 @@ private:
   typedef L4Re::Rm::Auto_region< l4virtio_config_hdr_t*> Cfg_region;
   typedef L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap Cfg_cap;
 
-  l4_uint32_t _vendor, _device, _qoffset, _nqueues, _cfg_offset;
-  l4_uint32_t _host_features[sizeof(l4virtio_config_hdr_t::host_features)
+  l4_uint32_t _vendor, _device, _qoffset, _nqueues;
+  l4_uint32_t _host_features[sizeof(l4virtio_config_hdr_t::dev_features_map)
                              / sizeof(l4_uint32_t)];
   Cfg_cap _ds;
   Cfg_region _config;
@@ -74,7 +74,7 @@ private:
 protected:
   void volatile *get_priv_config() const
   {
-    return reinterpret_cast<char *>(_config.get()) + _cfg_offset;
+    return l4virtio_device_config(_config.get());
   }
 
 public:
@@ -93,9 +93,8 @@ public:
   Dev_config(l4_uint32_t vendor, l4_uint32_t device,
              unsigned cfg_size, l4_uint32_t num_queues = 0)
   : _vendor(vendor), _device(device),
-    _qoffset(align(sizeof (l4virtio_config_hdr_t)) + align(cfg_size)),
-    _nqueues(num_queues),
-    _cfg_offset(align(sizeof (l4virtio_config_hdr_t)))
+    _qoffset(0x100 + align(cfg_size)),
+    _nqueues(num_queues)
   {
     using L4Re::Dataspace;
     using L4Re::chkcap;
@@ -118,9 +117,9 @@ public:
                                           L4::Ipc::make_cap_rw(cfg.get())));
     _ds = cfg;
     _config->generation = 0;
-    _config->guest_page_size = L4_PAGESIZE;
-    memset(_config->guest_features, 0, sizeof (_config->guest_features));
+    memset(_config->driver_features_map, 0, sizeof (_config->driver_features_map));
     memset(_host_features, 0, sizeof(_host_features));
+    _host_features[1] = 1; // virtio 1
     reset_hdr();
   }
 
@@ -203,17 +202,16 @@ public:
   void reset_hdr(bool inc_generation = false) const
   {
     _config->magic = *reinterpret_cast<l4_uint32_t const *>("virt");
-    _config->version = 1;
+    _config->version = 2;
     _config->device = _device;
     _config->vendor = _vendor;
     _config->status = 0;
     _config->irq_status = 0;
     _config->num_queues = _nqueues;
     _config->queues_offset = _qoffset;
-    _config->dev_cfg_offset = _cfg_offset;
 
-    memcpy(_config->host_features, _host_features,
-           sizeof(_config->host_features));
+    memcpy(_config->dev_features_map, _host_features,
+           sizeof(_config->dev_features_map));
     wmb();
     if (inc_generation)
       ++_config->generation;
@@ -239,8 +237,7 @@ public:
 
     qc->num_max = num_max;
     qc->num = 0;
-    qc->align = 0;
-    qc->pfn = 0;
+    qc->ready = 0;
     wmb();
     if (inc_generation)
       ++_config->generation;
@@ -761,30 +758,24 @@ public:
    */
   bool setup_queue(Virtqueue *q, unsigned qn, unsigned num_max)
   {
-    printf("%p:%p: setup queue %d, max %d\n", this, q, qn, num_max);
     l4virtio_config_queue_t volatile const *qc;
     qc = _device_config->qconfig(qn);
 
-    l4_uint64_t pfn = qc->pfn;
-
-    if (!pfn)
+    if (!qc->ready)
       {
         q->disable();
         return true;
       }
 
     // read to local variables before check
-    l4_uint32_t num = qc->num;
-    l4_uint32_t align = qc->align;
-    l4_uint64_t guest_page_size = _device_config->hdr()->guest_page_size;
+    l4_uint32_t num   = qc->num;
+    l4_uint64_t desc  = qc->desc_addr;
+    l4_uint64_t avail = qc->avail_addr;
+    l4_uint64_t used  = qc->used_addr;
 
     if (0)
-      printf("%p: setup queue: num=0x%x max_num=0x%x align=0x%x, pfn=0x%x, ps=0x%x\n",
-             this, num, num_max, align, (unsigned)pfn,
-             (unsigned)guest_page_size);
-
-    if (guest_page_size < 0x1 || guest_page_size > 0x10000000)
-      return false;
+      printf("%p: setup queue: num=0x%x max_num=0x%x desc=0x%llx avail=0x%llx used=0x%llx\n",
+             this, num, num_max, desc, avail, used);
 
     if (!num || num > num_max)
       return false;
@@ -793,24 +784,54 @@ public:
     if (num & (num - 1))
       return false;
 
-    // align must be power of two
-    if (align & (align - 1))
+    if (desc & 0xf)
       return false;
 
-    l4_uint64_t q_addr = pfn * guest_page_size;
-    unsigned long q_size = q->total_size(num, align);
-    auto const *info = _mem_info.find(q_addr, q_size);
-    if (L4_UNLIKELY(!info || !info->is_writable()))
+    if (avail & 0x1)
       return false;
 
-    printf("shm=[%llx-%llx] local=[%lx-%lx] queue=[%llx-%llx] (%p-%p)\n",
-           info->drv_base(), info->drv_base() + info->size() - 1,
-           (unsigned long)info->local_base(),
-           (unsigned long)info->local_base() + info->size() - 1,
-           q_addr, q_addr + q_size,
-           info->local(Ptr<char>(q_addr)),
-           info->local(Ptr<char>(q_addr)) + q_size);
-    q->setup(num, align, info->local(Ptr<void>(q_addr)));
+    if (used & 0x3)
+      return false;
+
+    auto const *desc_info = _mem_info.find(desc, Virtqueue::desc_size(num));
+    if (L4_UNLIKELY(!desc_info))
+      return false;
+
+    auto const *avail_info = _mem_info.find(avail, Virtqueue::avail_size(num));
+    if (L4_UNLIKELY(!avail_info))
+      return false;
+
+    auto const *used_info = _mem_info.find(used, Virtqueue::used_size(num));
+    if (L4_UNLIKELY(!used_info || !used_info->is_writable()))
+      return false;
+
+    printf("shm=[%llx-%llx] local=[%lx-%lx] desc=[%llx-%llx] (%p-%p)\n",
+           desc_info->drv_base(), desc_info->drv_base() + desc_info->size() - 1,
+           (unsigned long)desc_info->local_base(),
+           (unsigned long)desc_info->local_base() + desc_info->size() - 1,
+           desc, desc + Virtqueue::desc_size(num),
+           desc_info->local(Ptr<char>(desc)),
+           desc_info->local(Ptr<char>(desc)) + Virtqueue::desc_size(num));
+
+    printf("shm=[%llx-%llx] local=[%lx-%lx] avail=[%llx-%llx] (%p-%p)\n",
+           avail_info->drv_base(), avail_info->drv_base() + avail_info->size() - 1,
+           (unsigned long)avail_info->local_base(),
+           (unsigned long)avail_info->local_base() + avail_info->size() - 1,
+           avail, avail + Virtqueue::avail_size(num),
+           avail_info->local(Ptr<char>(avail)),
+           avail_info->local(Ptr<char>(avail)) + Virtqueue::avail_size(num));
+
+    printf("shm=[%llx-%llx] local=[%lx-%lx] used=[%llx-%llx] (%p-%p)\n",
+           used_info->drv_base(), used_info->drv_base() + used_info->size() - 1,
+           (unsigned long)used_info->local_base(),
+           (unsigned long)used_info->local_base() + used_info->size() - 1,
+           used, used + Virtqueue::used_size(num),
+           used_info->local(Ptr<char>(used)),
+           used_info->local(Ptr<char>(used)) + Virtqueue::used_size(num));
+
+    q->setup(num, desc_info->local(Ptr<void>(desc)),
+             avail_info->local(Ptr<void>(avail)),
+             used_info->local(Ptr<void>(used)));
     return true;
   }
 
