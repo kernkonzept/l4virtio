@@ -40,46 +40,46 @@
 #include <l4/sys/ipc.h>
 #include <l4/sys/types.h>
 
-/// L4-VIRTIO protocol number
+/** L4-VIRTIO protocol number */
 enum L4_virtio_protocol
 {
   L4VIRTIO_PROTOCOL = 0,
 };
 
-/// L4-VIRTIO opcodes
+/** L4-VIRTIO opcodes */
 enum L4_virtio_opcodes
 {
-  L4VIRTIO_OP_SET_STATUS  = 0,  ///< Set status register in device config
-  L4VIRTIO_OP_CONFIG_QUEUE,     ///< Set queue config in device config
-  L4VIRTIO_OP_REGISTER_IFACE,   ///< Register a transport driver to the device
-  L4VIRTIO_OP_REGISTER_DS,      ///< Register a data space as transport memory
+  L4VIRTIO_OP_SET_STATUS  = 0,  /**< Set status register in device config */
+  L4VIRTIO_OP_CONFIG_QUEUE,     /**< Set queue config in device config */
+  L4VIRTIO_OP_REGISTER_IFACE,   /**< Register a transport driver to the device */
+  L4VIRTIO_OP_REGISTER_DS,      /**< Register a data space as transport memory */
 };
 
-/// Virtio device IDs as reported in the driver's config space.
+/** Virtio device IDs as reported in the driver's config space. */
 enum L4virtio_device_ids
 {
-  L4VIRTIO_ID_NET           = 1,      ///< Virtual ethernet card.
-  L4VIRTIO_ID_BLOCK         = 2,      ///< General block device.
-  L4VIRTIO_ID_CONSOLE       = 3,      ///< Simple device for data IO via ports.
-  L4VIRTIO_ID_RNG           = 4,      ///< Entropy source.
-  L4VIRTIO_ID_BALLOON       = 5,      ///< Memory balooning device.
-  L4VIRTIO_ID_RPMSG         = 7,      ///< Device using rpmsg protocol.
-  L4VIRTIO_ID_SCSI          = 8,      ///< SCSI host device.
-  L4VIRTIO_ID_9P            = 9,      ///< Device using 9P transport protocol.
-  L4VIRTIO_ID_RPROC_SERIAL  = 11,     ///< Rproc serial device.
-  L4VIRTIO_ID_CAIF          = 12,     ///< Device using CAIF network protocol.
+  L4VIRTIO_ID_NET           = 1,      /**< Virtual ethernet card. */
+  L4VIRTIO_ID_BLOCK         = 2,      /**< General block device. */
+  L4VIRTIO_ID_CONSOLE       = 3,      /**< Simple device for data IO via ports. */
+  L4VIRTIO_ID_RNG           = 4,      /**< Entropy source. */
+  L4VIRTIO_ID_BALLOON       = 5,      /**< Memory balooning device. */
+  L4VIRTIO_ID_RPMSG         = 7,      /**< Device using rpmsg protocol. */
+  L4VIRTIO_ID_SCSI          = 8,      /**< SCSI host device. */
+  L4VIRTIO_ID_9P            = 9,      /**< Device using 9P transport protocol. */
+  L4VIRTIO_ID_RPROC_SERIAL  = 11,     /**< Rproc serial device. */
+  L4VIRTIO_ID_CAIF          = 12,     /**< Device using CAIF network protocol. */
 
-  L4VIRTIO_ID_SOCK          = 0x9999, ///< Inofficial socket device.
+  L4VIRTIO_ID_SOCK          = 0x9999, /**< Inofficial socket device. */
 };
 
-/// Virtio device status bits.
+/** Virtio device status bits. */
 enum L4virtio_device_status
 {
-  L4VIRTIO_STATUS_ACKNOWLEDGE = 1,   ///< Guest OS has found device.
-  L4VIRTIO_STATUS_DRIVER      = 2,   ///< Guest OS knows how to drive device.
-  L4VIRTIO_STATUS_DRIVER_OK   = 4,   ///< Driver is set up.
-  L4VIRTIO_STATUS_FEATURES_OK = 8,   ///< Driver has acknowledged feature set. (virtio 1.0 only)
-  L4VIRTIO_STATUS_FAILED      = 0x80 ///< Fatal error in driver or device.
+  L4VIRTIO_STATUS_ACKNOWLEDGE = 1,   /**< Guest OS has found device. */
+  L4VIRTIO_STATUS_DRIVER      = 2,   /**< Guest OS knows how to drive device. */
+  L4VIRTIO_STATUS_DRIVER_OK   = 4,   /**< Driver is set up. */
+  L4VIRTIO_STATUS_FEATURES_OK = 8,   /**< Driver has acknowledged feature set. */
+  L4VIRTIO_STATUS_FAILED      = 0x80 /**< Fatal error in driver or device. */
 };
 
 /**
@@ -88,8 +88,8 @@ enum L4virtio_device_status
  */
 enum L4_virtio_irq_status
 {
-  L4VIRTIO_IRQ_STATUS_VRING  = 1, ///< VRING IRQ pending flag
-  L4VIRTIO_IRQ_STATUS_CONFIG = 2, ///< CONFIG IRQ pending flag
+  L4VIRTIO_IRQ_STATUS_VRING  = 1, /**< VRING IRQ pending flag */
+  L4VIRTIO_IRQ_STATUS_CONFIG = 2, /**< CONFIG IRQ pending flag */
 };
 
 /**
