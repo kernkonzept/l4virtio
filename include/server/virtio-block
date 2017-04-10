@@ -407,7 +407,7 @@ public:
    * accordingly and the request immediately finished with finish_request()
    * if the client is to be answered.
    */
-  virtual bool process_request(cxx::unique_ptr<Request> req) = 0;
+  virtual bool process_request(cxx::unique_ptr<Request> &&req) = 0;
 
   /**
    * Reset the actual hardware device.
