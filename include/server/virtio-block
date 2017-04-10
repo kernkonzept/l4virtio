@@ -73,7 +73,7 @@ public:
       {
         while (rp.has_more())
           {
-            rp.next(this, &data);
+            rp.next(_mem_list, &data);
             total += data.len;
           }
       }
