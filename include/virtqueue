@@ -155,7 +155,7 @@ public:
   };
 
   /**
-   * \brief Type of an element of the used ring.
+   * Type of an element of the used ring.
    */
   struct Used_elem
   {
@@ -174,13 +174,13 @@ public:
   };
 
   /**
-   * \brief Used ring.
+   * Used ring.
    */
   class Used
   {
   public:
     /**
-     * \brief flags for the used ring.
+     * flags for the used ring.
      */
     struct Flags
     {
@@ -331,7 +331,7 @@ public:
   { return (char const *)_used - (char const *)_desc; }
 
   /**
-   * \brief Enable this queue.
+   * Enable this queue.
    *
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
@@ -364,7 +364,7 @@ public:
   }
 
   /**
-   * \brief Enable this queue.
+   * Enable this queue.
    *
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
@@ -372,7 +372,6 @@ public:
    *               block at `ring` must be at least `total_size(num)` bytes
    *               in size and have an alignment of #Desc_align
    *               (desc_align()) bits.
-   *
    *
    * Due to the data type of the descriptors, the queue can have a
    * maximum size of 2^16.
@@ -386,7 +385,7 @@ public:
   }
 
   /**
-   * \brief Dump descriptors for this queue.
+   * Dump descriptors for this queue.
    *
    * \pre the queue must be in working state.
    */
@@ -394,7 +393,7 @@ public:
   { d->dump(d - _desc); }
 
   /**
-   * \brief Test if this queue is in working state.
+   * Test if this queue is in working state.
    *
    * \return true when the queue is in working state, false else.
    */
@@ -406,7 +405,7 @@ public:
   { return _idx_mask + 1; }
 
    /**
-   * \brief Get the no IRQ flag of this queue.
+   * Get the no IRQ flag of this queue.
    *
    * \pre queue must be in working state.
    *
@@ -418,7 +417,7 @@ public:
   }
 
    /**
-   * \brief Get the no notify flag of this queue.
+   * Get the no notify flag of this queue.
    *
    * \pre queue must be in working state.
    *
@@ -482,7 +481,7 @@ public:
   Virtqueue() : _next_free(Eoq) {}
 
  /**
-   * Initialise the descriptor table and the index structures
+   * Initialize the descriptor table and the index structures
    * of this queue.
    *
    * \param num    The number of entries in the descriptor table, the
@@ -503,7 +502,7 @@ public:
   }
 
   /**
-   * Initialise this virtqueue.
+   * Initialize this virtqueue.
    *
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
@@ -516,7 +515,7 @@ public:
    * \param used   The address of the used ring. (Must be #Used_align aligned
    *               and at least `used_size(num)` bytes in size.)
    *
-   * This function sets up the memory and initialises the freelist.
+   * This function sets up the memory and initializes the freelist.
    */
   void init_queue(unsigned num, void *desc, void *avail, void *used)
   {
@@ -525,13 +524,13 @@ public:
   }
 
   /**
-   * Initialise this virtqueue.
+   * Initialize this virtqueue.
    *
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
    * \param base   The base address for the queue data structure.
    *
-   * This function sets up the memory and initialises the freelist.
+   * This function sets up the memory and initializes the freelist.
    */
   void init_queue(unsigned num, void *base)
   {
@@ -550,7 +549,7 @@ public:
    * \return The index of the reserved descriptor or Virtqueue::Eoq if
    *         no free descriptor is available.
    *
-   * Note: the implementation uses (2^16 -1) as the end of queue marker.
+   * Note: the implementation uses (2^16 - 1) as the end of queue marker.
    *       That means that the final entry in the queue can not be allocated
    *       iff the queue size is 2^16.
    */
