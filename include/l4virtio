@@ -24,6 +24,7 @@
 #include <l4/sys/cxx/ipc_client>
 #include <l4/re/dataspace>
 #include <l4/sys/irq>
+#include <l4/cxx/utils>
 
 namespace L4virtio {
 class Device :
@@ -41,6 +42,46 @@ public:
     T *device_config() const
     {
       return static_cast<T*>(l4virtio_device_config(this));
+    }
+
+    int config_queue(unsigned num, L4::Cap<L4::Triggerable> out_notify,
+                     L4::Cap<L4::Triggerable> in_notify,
+                     l4_timeout_s to = L4_IPC_TIMEOUT_NEVER)
+    {
+      return send_cmd(L4VIRTIO_CMD_CFG_QUEUE | num,
+                      out_notify, in_notify, to);
+    }
+
+    int set_status(unsigned new_status, L4::Cap<L4::Triggerable> out_notify,
+                   L4::Cap<L4::Triggerable> in_notify,
+                   l4_timeout_s to = L4_IPC_TIMEOUT_NEVER)
+    {
+      return send_cmd(L4VIRTIO_CMD_SET_STATUS | new_status,
+                      out_notify, in_notify, to);
+    }
+
+    int send_cmd(unsigned command, L4::Cap<L4::Triggerable> out_notify,
+                 L4::Cap<L4::Triggerable> in_notify,
+                 l4_timeout_s to = L4_IPC_TIMEOUT_NEVER)
+    {
+      cxx::write_now(&cmd, command);
+
+      if (out_notify)
+        out_notify->trigger();
+
+      auto utcb = l4_utcb();
+      auto ipc_to = l4_timeout(L4_IPC_TIMEOUT_0, to);
+
+      do
+        {
+          if (in_notify)
+            if (l4_ipc_error(l4_ipc_receive(in_notify.cap(),
+                             utcb, ipc_to), utcb) == L4_IPC_RETIMEOUT)
+              break;
+        }
+      while (cxx::access_once(&cmd));
+
+      return cxx::access_once(&cmd) ? -L4_EBUSY : L4_EOK;
     }
   };
 

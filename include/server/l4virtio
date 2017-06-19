@@ -139,6 +139,28 @@ public:
   Status status() const { return _status; }
 
   /**
+   * Get the value from the `cmd` register.
+   *
+   * Note, the most significant eight bits are the command (0 is nothing to
+   * do). The upper eight bit are reset to zero after the command was handled.
+   */
+  l4_uint32_t get_cmd() const
+  {
+    return hdr()->cmd;
+  }
+
+  /**
+   * Reset the `cmd` register after execution of a command.
+   *
+   * This function resets the `cmd` register in order for the client to
+   * detect that the command was executed by the device.
+   */
+  void reset_cmd()
+  {
+    const_cast<l4_uint32_t volatile &>(hdr()->cmd) = 0;
+  }
+
+  /**
    * \brief Set device status register.
    * \param status  The new value for the device status register.
    *
@@ -847,6 +869,40 @@ public:
            (unsigned long)i->local_base(),
            (unsigned long)i->local_base() + i->size() - 1,
            i->ds_offset());
+  }
+
+  /**
+   * Check for a value in the `cmd` register and handle a write.
+   *
+   * This function checks for a value in the `cmd` register and executes
+   * the command if there is any, or returns false if there was no command.
+   *
+   * Execution of the command is signaled by a zero in the `cmd` register.
+   */
+  bool handle_mem_cmd_write()
+  {
+    l4_uint32_t cmd = _device_config->get_cmd();
+    if (L4_LIKELY(!(cmd & L4VIRTIO_CMD_MASK)))
+      return false;
+
+    switch (cmd & L4VIRTIO_CMD_MASK)
+      {
+      case L4VIRTIO_CMD_SET_STATUS:
+        _set_status(cmd & ~L4VIRTIO_CMD_MASK);
+        break;
+
+      case L4VIRTIO_CMD_CFG_QUEUE:
+        reconfig_queue(cmd & ~L4VIRTIO_CMD_MASK);
+        break;
+
+      default:
+        // unknown command
+        break;
+      }
+
+    _device_config->reset_cmd();
+
+    return true;
   }
 
 private:

@@ -87,6 +87,15 @@ enum L4virtio_device_status
   L4VIRTIO_STATUS_FAILED      = 0x80 /**< Fatal error in driver or device. */
 };
 
+/** L4virtio-specific feature bits. */
+enum L4virtio_feature_bits
+{
+  /// Virtio protocol version 1 supported. Must be 1 for L4virtio.
+  L4VIRTIO_FEATURE_VERSION_1  = 32,
+  /// Status and queue config are set via cmd field instead of via IPC.
+  L4VIRTIO_FEATURE_CMD_CONFIG = 33
+};
+
 /**
  * VIRTIO IRQ status codes (l4virtio_config_hdr_t::irq_status).
  * \note l4virtio_config_hdr_t::irq_status is currently unused.
@@ -95,6 +104,17 @@ enum L4_virtio_irq_status
 {
   L4VIRTIO_IRQ_STATUS_VRING  = 1, /**< VRING IRQ pending flag */
   L4VIRTIO_IRQ_STATUS_CONFIG = 2, /**< CONFIG IRQ pending flag */
+};
+
+/**
+ * Virtio commands for device configuration.
+ */
+enum L4_virtio_cmd
+{
+  L4VIRTIO_CMD_NONE       = 0x00000000, ///< No command pending
+  L4VIRTIO_CMD_SET_STATUS = 0x01000000, ///< Set the status register
+  L4VIRTIO_CMD_CFG_QUEUE  = 0x02000000, ///< Configure a queue
+  L4VIRTIO_CMD_MASK       = 0xff000000, ///< Mask to get command bits
 };
 
 /**
@@ -152,8 +172,15 @@ typedef struct l4virtio_config_hdr_t
   l4_uint32_t dev_features_map[8];
   l4_uint32_t driver_features_map[8];
 
-  l4_uint32_t _res10[5];
+  l4_uint32_t _res10[2];
 
+  /** W: Event index to be used for config notifications (device to driver) */
+  l4_uint32_t cfg_driver_notify_index;
+  /** R: Event index to be used for config notifications (driver to device) */
+  l4_uint32_t cfg_device_notify_index;
+
+  /** L4 specific command register polled by the driver iff supported */
+  l4_uint32_t cmd;
   l4_uint32_t generation;
 } l4virtio_config_hdr_t;
 
@@ -184,7 +211,7 @@ typedef struct l4virtio_config_queue_t
   /** RW: queue ready flag (read-write) */
   l4_uint16_t ready;
 
-  /** W: Event index to be used for device notifications (device to host) */
+  /** W: Event index to be used for device notifications (device to driver) */
   l4_uint16_t driver_notify_index;
 
   l4_uint64_t desc_addr;  /**< W: address of descriptor table */
