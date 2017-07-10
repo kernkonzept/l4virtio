@@ -58,12 +58,13 @@ struct Dev_status
    * \brief Check if the device is in running state.
    * \return true if the device is in running state.
    *
-   * The device is in running state when acked(), driver(), and driver_ok()
-   * return true, and failed() returns false.
+   * The device is in running state when acked(), driver(),
+   * feature_ok, and driver_ok() return true,
+   * and failed() returns false.
    */
   bool running() const
   {
-    return (raw == 7);
+    return (raw == 0xf);
   }
 };
 
