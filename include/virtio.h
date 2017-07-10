@@ -46,6 +46,11 @@ enum L4_virtio_protocol
   L4VIRTIO_PROTOCOL = 0,
 };
 
+enum L4virtio_magic
+{
+  L4VIRTIO_MAGIC = 0x74726976
+};
+
 /** L4-VIRTIO opcodes */
 enum L4_virtio_opcodes
 {

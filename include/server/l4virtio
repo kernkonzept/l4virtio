@@ -201,7 +201,7 @@ public:
    */
   void reset_hdr(bool inc_generation = false) const
   {
-    _config->magic = *reinterpret_cast<l4_uint32_t const *>("virt");
+    _config->magic = L4VIRTIO_MAGIC;
     _config->version = 2;
     _config->device = _device;
     _config->vendor = _vendor;
