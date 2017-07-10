@@ -123,6 +123,15 @@ public:
     reset_hdr();
   }
 
+  void set_host_feature(unsigned feature)
+  { l4virtio_set_feature(_host_features, feature); }
+
+  void clear_host_feature(unsigned feature)
+  { l4virtio_clear_feature(_host_features, feature); }
+
+  bool get_host_feature(unsigned feature)
+  { return l4virtio_get_feature(_host_features, feature); }
+
   l4_uint32_t &host_features(unsigned idx)
   { return _host_features[idx]; }
 

@@ -246,6 +246,43 @@ l4virtio_device_config(l4virtio_config_hdr_t const *cfg)
   return (void *)(((l4_addr_t)cfg) + 0x100);
 }
 
+/**
+ * Set the given feature bit in a feature map.
+ */
+L4_INLINE void
+l4virtio_set_feature(l4_uint32_t *feature_map, unsigned feat)
+{
+  unsigned idx = feat / 32;
+
+  if (idx < 8)
+    feature_map[idx] |= 1UL << (feat % 32);
+}
+
+/**
+ * Clear the given feature bit in a feature map.
+ */
+L4_INLINE void
+l4virtio_clear_feature(l4_uint32_t *feature_map, unsigned feat)
+{
+  unsigned idx = feat / 32;
+
+  if (idx < 8)
+    feature_map[idx] &= ~(1UL << (feat % 32));
+}
+
+/**
+ * Check if the given bit in a feature map is set.
+ */
+L4_INLINE bool
+l4virtio_get_feature(l4_uint32_t *feature_map, unsigned feat)
+{
+  unsigned idx = feat / 32;
+
+  if (idx >= 8)
+    return false;
+
+  return feature_map[idx] & (1UL << (feat % 32));
+}
 
 /**
  * Write the VIRTIO status register.
