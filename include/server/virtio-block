@@ -105,7 +105,7 @@ public:
   /**
    * Return next block in scatter-gather list.
    *
-   * \param[out] out  Information about the next data block.
+   * \return Information about the next data block.
    *
    * \throws L4::Runtime_error  No more data block is available.
    * \throws Bad_descriptor     Virtio request is corrupted.
