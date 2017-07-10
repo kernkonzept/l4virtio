@@ -160,6 +160,19 @@ typedef struct l4virtio_config_hdr_t
 /**
  * Queue configuration entry. An array of such entries is available at the
  * l4virtio_config_hdr_t::queues_offset in the config data space.
+ *
+ * Consistency rules for the queue config are:
+ *  - A driver might read `num_max` at any time.
+ *  - A driver must write to `num`, `desc_addr`, `avail_addr`, and `used_addr`
+ *    only when `ready` is zero (0). Values in these fields are validated and
+ *    used by the device only after successfully setting `ready` to one (1),
+ *    either by the IPC or by L4VIRTIO_CMD_CFG_QUEUE.
+ *  - The value of `device_notify_index` is valid only when `ready` is one.
+ *  - The driver might write to `device_notify_index` at any time, however
+ *    the change is guaranteed to take effect after a successful
+ *    L4VIRTIO_CMD_CFG_QUEUE or after a config_queue IPC. Note, the change
+ *    might also have immediate effect, depending on the device
+ *    implementation.
  */
 typedef struct l4virtio_config_queue_t
 {
