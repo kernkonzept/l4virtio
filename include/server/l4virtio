@@ -835,26 +835,32 @@ public:
     return true;
   }
 
-private:
-  void _check_n_init_shm(L4::Ipc::Snd_fpage shm_cap_fp,
+  void check_n_init_shm(L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap &&shm,
                         l4_uint64_t base, l4_uint32_t size, l4_addr_t offset)
   {
-    if (!shm_cap_fp.cap_received())
-      L4Re::chksys(-L4_EINVAL);
-
     if (_mem_info.full())
       L4Re::chksys(-L4_ERANGE);
 
-    L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap ds;
-    ds = L4Re::chkcap(server_iface()->template rcv_cap<L4Re::Dataspace>(0));
-    L4Re::chksys(server_iface()->realloc_rcv_cap(0));
-
-    auto const *i = _mem_info.add(base, size, offset, cxx::move(ds));
+    auto const *i = _mem_info.add(base, size, offset, cxx::move(shm));
     printf("PORT[%p]: DMA guest [%08llx-%08llx]  local [%08lx-%08lx]  offset %lx\n",
            this, i->drv_base(), i->drv_base() + i->size() - 1,
            (unsigned long)i->local_base(),
            (unsigned long)i->local_base() + i->size() - 1,
            i->ds_offset());
+  }
+
+private:
+  void _check_n_init_shm(L4::Ipc::Snd_fpage shm_cap_fp,
+                         l4_uint64_t base, l4_uint32_t size, l4_addr_t offset)
+  {
+    if (!shm_cap_fp.cap_received())
+      L4Re::chksys(-L4_EINVAL);
+
+    L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap ds;
+    ds = L4Re::chkcap(server_iface()->template rcv_cap<L4Re::Dataspace>(0));
+    L4Re::chksys(server_iface()->realloc_rcv_cap(0));
+
+    check_n_init_shm(cxx::move(ds), base, size, offset);
   }
 
   int _set_status(unsigned _status)
