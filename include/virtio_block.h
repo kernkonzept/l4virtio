@@ -30,9 +30,10 @@
  */
 enum L4virtio_block_operations
 {
-  L4VIRTIO_BLOCK_T_IN    = 0,  /**<  Read from device */
-  L4VIRTIO_BLOCK_T_OUT   = 1,  /**<  Write to device */
-  L4VIRTIO_BLOCK_T_FLUSH = 4   /**<  Flush disk */
+  L4VIRTIO_BLOCK_T_IN     = 0,  /**<  Read from device */
+  L4VIRTIO_BLOCK_T_OUT    = 1,  /**<  Write to device */
+  L4VIRTIO_BLOCK_T_FLUSH  = 4,  /**<  Flush data to disk */
+  L4VIRTIO_BLOCK_T_GET_ID = 8,  /**<  Get device ID */
 };
 
 /**
