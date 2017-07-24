@@ -273,13 +273,13 @@ l4virtio_clear_feature(l4_uint32_t *feature_map, unsigned feat)
 /**
  * Check if the given bit in a feature map is set.
  */
-L4_INLINE bool
+L4_INLINE unsigned
 l4virtio_get_feature(l4_uint32_t *feature_map, unsigned feat)
 {
   unsigned idx = feat / 32;
 
   if (idx >= 8)
-    return false;
+    return 0;
 
   return feature_map[idx] & (1UL << (feat % 32));
 }
