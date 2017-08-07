@@ -228,11 +228,14 @@ public:
   void disable()
   { _desc = 0; }
 
+  /**
+   * Fixed alignment values for different parts of a virtqueue.
+   */
   enum
   {
-    Desc_align  = 4,
-    Avail_align = 1,
-    Used_align  = 2,
+    Desc_align  = 4, //< Alignment of the descriptor table.
+    Avail_align = 1, //< Alignment of the available ring.
+    Used_align  = 2, //< Alignment of the used ring.
   };
 
   /**
@@ -336,12 +339,12 @@ public:
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
    * \param desc   The address of the descriptor table. (Must be
-   *               #Desc_align aligned and at least `desc_size(num)` bytes
+   *               Desc_align aligned and at least `desc_size(num)` bytes
    *               in size.)
    * \param avail  The address of the available ring. (Must be
-   *               #Avail_align aligned and at least `avail_size(num)` bytes
+   *               Avail_align aligned and at least `avail_size(num)` bytes
    *               in size.)
-   * \param used   The address of the used ring. (Must be #Used_align aligned
+   * \param used   The address of the used ring. (Must be Used_align aligned
    *               and at least `used_size(num)` bytes in size.)
    *
    * Due to the data type of the descriptors, the queue can have a
@@ -370,7 +373,7 @@ public:
    *               available ring, and the used ring (must be a power of 2).
    * \param ring   The base address for the queue data structure. The memory
    *               block at `ring` must be at least `total_size(num)` bytes
-   *               in size and have an alignment of #Desc_align
+   *               in size and have an alignment of Desc_align
    *               (desc_align()) bits.
    *
    * Due to the data type of the descriptors, the queue can have a
@@ -507,12 +510,12 @@ public:
    * \param num    The number of entries in the descriptor table, the
    *               available ring, and the used ring (must be a power of 2).
    * \param desc   The address of the descriptor table. (Must be
-   *               #Desc_align aligned and at least `desc_size(num)` bytes
+   *               Desc_align aligned and at least `desc_size(num)` bytes
    *               in size.)
    * \param avail  The address of the available ring. (Must be
-   *               #Avail_align aligned and at least `avail_size(num)` bytes
+   *               Avail_align aligned and at least `avail_size(num)` bytes
    *               in size.)
-   * \param used   The address of the used ring. (Must be #Used_align aligned
+   * \param used   The address of the used ring. (Must be Used_align aligned
    *               and at least `used_size(num)` bytes in size.)
    *
    * This function sets up the memory and initializes the freelist.
