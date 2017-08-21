@@ -579,7 +579,9 @@ public:
       throw L4::Bounds_error();
 
     // TODO lock required
-    _avail->ring[_avail->idx++ & _idx_mask] = descno; // _avail->idx expected to wrap
+    _avail->ring[_avail->idx & _idx_mask] = descno; // _avail->idx expected to wrap
+    wmb();
+    ++_avail->idx;
   }
 
   /**
