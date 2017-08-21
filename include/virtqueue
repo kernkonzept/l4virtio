@@ -599,16 +599,26 @@ public:
   /**
    * Return the next finished block.
    *
+   * \param[out] len  (optional) Size of valid data in finished block.
+   *                  Note that this is the value reported by the device,
+   *                  which may set it to a value that is larger than the
+   *                  original buffer size.
+   *
    * \return Index of the head or Virtqueue::Eoq
    *         if no used element is currently available.
    */
-  l4_uint16_t find_next_used()
+  l4_uint16_t find_next_used(l4_uint32_t *len = nullptr)
   {
     // TODO lock required
     if (_current_avail == _used->idx)
       return Eoq;
 
-    return _used->ring[_current_avail++ & _idx_mask].id;
+    auto elem = _used->ring[_current_avail++ & _idx_mask];
+
+    if (len)
+      *len = elem.len;
+
+    return elem.id;
   }
 
   /**
