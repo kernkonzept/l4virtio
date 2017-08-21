@@ -73,6 +73,10 @@ enum L4virtio_device_ids
   L4VIRTIO_ID_9P            = 9,      /**< Device using 9P transport protocol. */
   L4VIRTIO_ID_RPROC_SERIAL  = 11,     /**< Rproc serial device. */
   L4VIRTIO_ID_CAIF          = 12,     /**< Device using CAIF network protocol. */
+  L4VIRTIO_ID_GPU           = 16,     /**< GPU */
+  L4VIRTIO_ID_INPUT         = 18,     /**< Input */
+  L4VIRTIO_ID_VSOCK         = 19,     /**< Vsock transport */
+  L4VIRTIO_ID_CRYPTO        = 20,     /**< Crypto */
 
   L4VIRTIO_ID_SOCK          = 0x9999, /**< Inofficial socket device. */
 };
