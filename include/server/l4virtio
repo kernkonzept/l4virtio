@@ -17,6 +17,8 @@
  */
 #pragma once
 
+#include <limits.h>
+
 #include <l4/re/dataspace>
 #include <l4/re/env>
 #include <l4/re/error_helper>
@@ -351,9 +353,9 @@ private:
   typedef L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap Ds_cap;
 
   l4_uint64_t _drv_base; ///< base address used by the driver
-  l4_uint32_t _size;     ///< size of the region in bytes (up to 4G)
-  Flags       _flags;    ///< flags attached to this region
   l4_uint64_t _trans_offset; ///< offset for fast translation
+  l4_umword_t _size;     ///< size of the region in bytes
+  Flags       _flags;    ///< flags attached to this region
 
   Ds_cap      _ds;       ///< data space capability backing this region
   l4_addr_t   _ds_offset;
@@ -382,7 +384,7 @@ public:
    * This constructor attaches the region of given data space to the
    * local address space and stores the corresponding data for later reference.
    */
-  Driver_mem_region_t(l4_uint64_t drv_base, l4_uint32_t size,
+  Driver_mem_region_t(l4_uint64_t drv_base, l4_umword_t size,
                       l4_addr_t offset, Ds_cap &&ds)
   : _drv_base(l4_trunc_page(drv_base)), _size(0),
     _ds_offset(l4_trunc_page(offset))
@@ -407,6 +409,10 @@ public:
 
     if (_ds_offset > ds_size - size)
       chksys(-L4_EINVAL, "invalid offset or size");
+
+    // overflow check
+    if ((ULLONG_MAX - size) < _drv_base)
+      chksys(-L4_EINVAL, "invalid size");
 
     _flags.rw() = ds_info.flags & L4Re::Dataspace::Map_rw;
 
@@ -438,7 +444,7 @@ public:
   void *local_base() const { return (void*)_local_base.get(); }
 
   /// \return The size of the region in bytes.
-  l4_uint32_t size() const { return _size; }
+  l4_umword_t size() const { return _size; }
 
   /// \return The offset within the data space.
   l4_addr_t ds_offset() const { return _ds_offset; }
@@ -453,7 +459,7 @@ public:
    * \return true if the given driver address region is contained in
    *         this region, false else.
    */
-  bool contains(l4_uint64_t base, l4_uint32_t size) const
+  bool contains(l4_uint64_t base, l4_umword_t size) const
   {
     if (base < _drv_base)
       return false;
@@ -530,7 +536,7 @@ public:
    * \param ds        Data space backing the driver memory.
    * \return A pointer to the new region.
    */
-  Mem_region const *add(l4_uint64_t drv_base, l4_uint32_t size,
+  Mem_region const *add(l4_uint64_t drv_base, l4_umword_t size,
                         l4_addr_t offset, Ds_cap &&ds)
   {
     if (full())
@@ -564,7 +570,7 @@ public:
    * \return Pointer to the region containing the given region,
    *         NULL if none is found.
    */
-  Mem_region *find(l4_uint64_t base, l4_uint32_t size) const
+  Mem_region *find(l4_uint64_t base, l4_umword_t size) const
   {
     return _find(base, size);
   }
@@ -626,7 +632,7 @@ public:
   }
 
 private:
-  Mem_region *_find(l4_uint64_t base, l4_uint32_t size) const
+  Mem_region *_find(l4_uint64_t base, l4_umword_t size) const
   {
     for (unsigned i = 0; i < _free; ++i)
       if (_l[i].contains(base, size))
@@ -867,13 +873,13 @@ public:
   }
 
   void check_n_init_shm(L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap &&shm,
-                        l4_uint64_t base, l4_uint32_t size, l4_addr_t offset)
+                        l4_uint64_t base, l4_umword_t size, l4_addr_t offset)
   {
     if (_mem_info.full())
       L4Re::chksys(-L4_ERANGE);
 
     auto const *i = _mem_info.add(base, size, offset, cxx::move(shm));
-    printf("PORT[%p]: DMA guest [%08llx-%08llx]  local [%08lx-%08lx]  offset %lx\n",
+    printf("PORT[%p]: DMA guest [%llx-%llx]  local [%lx-%lx]  offset %lx\n",
            this, i->drv_base(), i->drv_base() + i->size() - 1,
            (unsigned long)i->local_base(),
            (unsigned long)i->local_base() + i->size() - 1,
@@ -916,7 +922,7 @@ public:
 
 private:
   void _check_n_init_shm(L4::Ipc::Snd_fpage shm_cap_fp,
-                         l4_uint64_t base, l4_uint32_t size, l4_addr_t offset)
+                         l4_uint64_t base, l4_umword_t size, l4_addr_t offset)
   {
     if (!shm_cap_fp.cap_received())
       L4Re::chksys(-L4_EINVAL);
