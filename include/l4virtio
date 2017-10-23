@@ -75,8 +75,8 @@ public:
       do
         {
           if (in_notify)
-            if (l4_ipc_error(l4_ipc_receive(in_notify.cap(),
-                             utcb, ipc_to), utcb) == L4_IPC_RETIMEOUT)
+            if (l4_ipc_error(l4_ipc_receive(in_notify.cap(), utcb, ipc_to),
+                             utcb) == L4_IPC_RETIMEOUT)
               break;
         }
       while (cxx::access_once(&cmd));
