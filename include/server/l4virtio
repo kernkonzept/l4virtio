@@ -24,6 +24,7 @@
 #include <l4/re/error_helper>
 #include <l4/re/rm>
 #include <l4/re/util/cap_alloc>
+#include <l4/re/util/unique_cap>
 
 #include <l4/sys/types.h>
 #include <l4/re/util/meta>
@@ -59,8 +60,8 @@ public:
   typedef Dev_features Features;
 
 private:
-  typedef L4Re::Rm::Auto_region< l4virtio_config_hdr_t*> Cfg_region;
-  typedef L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap Cfg_cap;
+  typedef L4Re::Rm::Unique_region< l4virtio_config_hdr_t*> Cfg_region;
+  typedef L4Re::Util::Unique_cap<L4Re::Dataspace> Cfg_cap;
 
   l4_uint32_t _vendor, _device, _qoffset, _nqueues;
   l4_uint32_t _host_features[sizeof(l4virtio_config_hdr_t::dev_features_map)
@@ -112,12 +113,13 @@ public:
         _nqueues = 0;
       }
 
-    Cfg_cap cfg = chkcap(L4Re::Util::cap_alloc.alloc<Dataspace>());
+    typedef L4Re::Util::Unique_cap<L4Re::Dataspace> Cfg_cap;
+    Cfg_cap cfg = chkcap(L4Re::Util::make_unique_cap<Dataspace>());
     chksys(L4Re::Env::env()->mem_alloc()->alloc(L4_PAGESIZE, cfg.get()));
     chksys(L4Re::Env::env()->rm()->attach(&_config, L4_PAGESIZE,
                                           L4Re::Rm::Search_addr,
                                           L4::Ipc::make_cap_rw(cfg.get())));
-    _ds = cfg;
+    _ds = cxx::move(cfg);
     _config->generation = 0;
     memset(_config->driver_features_map, 0, sizeof (_config->driver_features_map));
     memset(_host_features, 0, sizeof(_host_features));
@@ -350,7 +352,7 @@ public:
 
 private:
   /// type for storing a data-space capability internally
-  typedef L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap Ds_cap;
+  typedef L4Re::Util::Unique_cap<L4Re::Dataspace> Ds_cap;
 
   l4_uint64_t _drv_base; ///< base address used by the driver
   l4_uint64_t _trans_offset; ///< offset for fast translation
@@ -361,7 +363,7 @@ private:
   l4_addr_t   _ds_offset;
 
   /// local mapping of the region
-  L4Re::Rm::Auto_region<l4_addr_t> _local_base;
+  L4Re::Rm::Unique_region<l4_addr_t> _local_base;
 
   template<typename T>
   T _local(l4_uint64_t addr) const
@@ -508,7 +510,7 @@ private:
 
 public:
   /// type for storing a data-space capability internally
-  typedef L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap Ds_cap;
+  typedef L4Re::Util::Unique_cap<L4Re::Dataspace> Ds_cap;
 
   /// Make an empty, zero capacity list.
   Driver_mem_list_t() : _max(0), _free(0) {}
@@ -872,7 +874,7 @@ public:
     return true;
   }
 
-  void check_n_init_shm(L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap &&shm,
+  void check_n_init_shm(L4Re::Util::Unique_cap<L4Re::Dataspace> &&shm,
                         l4_uint64_t base, l4_umword_t size, l4_addr_t offset)
   {
     if (_mem_info.full())
@@ -927,8 +929,8 @@ private:
     if (!shm_cap_fp.cap_received())
       L4Re::chksys(-L4_EINVAL);
 
-    L4Re::Util::Auto_cap<L4Re::Dataspace>::Cap ds;
-    ds = L4Re::chkcap(server_iface()->template rcv_cap<L4Re::Dataspace>(0));
+    L4Re::Util::Unique_cap<L4Re::Dataspace> ds(
+        L4Re::chkcap(server_iface()->template rcv_cap<L4Re::Dataspace>(0)));
     L4Re::chksys(server_iface()->realloc_rcv_cap(0));
 
     check_n_init_shm(cxx::move(ds), base, size, offset);
