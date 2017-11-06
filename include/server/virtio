@@ -51,7 +51,7 @@ struct Dev_status
   CXX_BITFIELD_MEMBER( 0,  0, acked, raw);
   CXX_BITFIELD_MEMBER( 1,  1, driver, raw);
   CXX_BITFIELD_MEMBER( 2,  2, driver_ok, raw);
-  CXX_BITFIELD_MEMBER( 4,  4, feature_ok, raw);
+  CXX_BITFIELD_MEMBER( 3,  3, features_ok, raw);
   CXX_BITFIELD_MEMBER( 7,  7, failed, raw);
 
   /**
@@ -59,7 +59,7 @@ struct Dev_status
    * \return true if the device is in running state.
    *
    * The device is in running state when acked(), driver(),
-   * feature_ok, and driver_ok() return true,
+   * features_ok(), and driver_ok() return true,
    * and failed() returns false.
    */
   bool running() const
