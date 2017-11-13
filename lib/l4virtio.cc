@@ -1,7 +1,7 @@
 /*
  * Created on: 12.11.2013
  *     Author: Matthias Lange <matthias.lange@kernkonzept.com>
- *             Alexander Warg <alexander.wagr@kernkonzept.com>
+ *             Alexander Warg <alexander.warg@kernkonzept.com>
  */
 
 #include <l4/l4virtio/virtio.h>
