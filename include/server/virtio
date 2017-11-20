@@ -352,6 +352,27 @@ struct Bad_descriptor
   Bad_descriptor(Request_processor const *proc, Error e)
   : proc(proc), error(e)
   {}
+
+  /**
+   * Get a human readable description of the error code.
+   *
+   * \return  Message describing the error.
+   */
+  char const *message() const
+  {
+    char const *const err[] = {
+      [Bad_address] = "Descriptor address cannot be translated",
+      [Bad_rights]  = "Insufficient memory access rights",
+      [Bad_flags]   = "Invalid descriptor flags",
+      [Bad_next]    = "The descriptor's `next` index is invalid",
+      [Bad_size]    = "Invalid size of the memory block"
+    };
+
+    if (error >= (sizeof(err) / sizeof(err[0])))
+      return "Unknown error";
+
+   return err[error];
+  }
 };
 
 
