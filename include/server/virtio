@@ -392,13 +392,19 @@ private:
 
 public:
   /**
-   * \brief Start processing a new request.
+   * Start processing a new request.
+   *
    * \tparam DESCM_MAN  Type of descriptor manager (implicit).
-   * \param dm       Descriptor manager that is used to translate VIRTIO descriptor addresses.
-   * \param ring     VIRTIO ring of the request.
-   * \param request  VIRTIO request from Virtqueue::next_avail()
-   * \param args     Extra arguments passed to dm->load_desc()
+   * \param  dm         Descriptor manager that is used to translate VIRTIO
+   *                    descriptor addresses.
+   * \param  ring       VIRTIO ring of the request.
+   * \param  request    VIRTIO request from Virtqueue::next_avail()
+   * \param  args       Extra arguments passed to dm->load_desc()
+   *
    * \pre The given request must be valid.
+   *
+   * \throws Bad_descriptor  The descriptor has an invalid size or load_desc()
+   *                         has thrown an exception by itself.
    */
   template<typename DESC_MAN, typename ...ARGS>
   void start(DESC_MAN *dm, Virtqueue *ring, Virtqueue::Head_desc const &request, ARGS... args)
@@ -453,11 +459,17 @@ public:
   { return _current.flags.next(); }
 
   /**
-   * \brief Switch to the next descriptor in a descriptor chain.
+   * Switch to the next descriptor in a descriptor chain.
+   *
    * \tparam DESCM_MAN  Type of descriptor manager (implicit).
-   * \param dm       Descriptor manager that is used to translate VIRTIO descriptor addresses.
-   * \param args     Extra arguments passed to dm->load_desc()
-   * \return true if a descriptor is available, false if not.
+   * \param  dm         Descriptor manager that is used to translate VIRTIO
+   *                    descriptor addresses.
+   * \param  args       Extra arguments passed to dm->load_desc()
+   *
+   * \retval true   A next descriptor is available.
+   * \retval false  No descriptor available.
+   *
+   * \throws Bad_descriptor  The `next` index of this descriptor is invalid.
    */
   template<typename DESC_MAN, typename ...ARGS>
   bool next(DESC_MAN *dm, ARGS... args)

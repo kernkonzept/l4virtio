@@ -578,10 +578,13 @@ public:
   }
 
   /**
-   * \brief Default implementation for loading an indirect descriptor.
-   * \param desc  The descriptor to load
-   * \param p     The request processor calling us
+   * Default implementation for loading an indirect descriptor.
+   *
+   * \param      desc   The descriptor to load
+   * \param      p      The request processor calling us
    * \param[out] table  Shall be set to the loaded descriptor table
+   *
+   * \throws Bad_descriptor  The descriptor address could not be translated.
    */
   void load_desc(Virtqueue::Desc const &desc, Request_processor const *p,
                  Virtqueue::Desc const **table) const
@@ -594,11 +597,14 @@ public:
   }
 
   /**
-   * \brief Default implementation returning the Driver_mem_region
-   * \param desc  The descriptor to load
-   * \param p     The request processor calling us
+   * Default implementation returning the Driver_mem_region
+   *
+   * \param      desc  The descriptor to load
+   * \param      p     The request processor calling us
    * \param[out] data  Shall be set to a pointer to the Driver_mem_region
    *                   that covers the descriptor.
+   *
+   * \throws Bad_descriptor  The descriptor address could not be translated.
    */
   void load_desc(Virtqueue::Desc const &desc, Request_processor const *p,
                  Mem_region const **data) const
@@ -611,16 +617,20 @@ public:
   }
 
   /**
-   * \brief Default implementation returning generic information.
-   * \tparam ARG  Abstract argument type used with Request_processor::start()
-   *              and Request_processor::next() to deliver the result of
-   *              loading a descriptor. This type must provide a constructor
-   *              taking three arguments: (1) pointer to a Driver_mem_region,
-   *              (2) the Virtqueue::Desc descriptor, and (3) a pointer to the
-   *              calling Request_processor.
-   * \param desc  The descriptor to load
-   * \param p     The request processor calling us
+   * Default implementation returning generic information.
+   *
+   * \tparam     ARG   Abstract argument type used with
+   *                   Request_processor::start() and Request_processor::next()
+   *                   to deliver the result of loading a descriptor. This type
+   *                   must provide a constructor taking three arguments: (1)
+   *                   pointer to a Driver_mem_region, (2) the Virtqueue::Desc
+   *                   descriptor, and (3) a pointer to the calling
+   *                   Request_processor.
+   * \param      desc  The descriptor to load
+   * \param      p     The request processor calling us
    * \param[out] data  Shall be assigned to ARG(mem, desc, p)
+   *
+   * \throws Bad_descriptor  The descriptor address could not be translated.
    */
   template<typename ARG>
   void load_desc(Virtqueue::Desc const &desc, Request_processor const *p,
