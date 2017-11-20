@@ -888,7 +888,7 @@ public:
                         l4_uint64_t base, l4_umword_t size, l4_addr_t offset)
   {
     if (_mem_info.full())
-      L4Re::chksys(-L4_ERANGE);
+      L4Re::chksys(-L4_ENOMEM);
 
     auto const *i = _mem_info.add(base, size, offset, cxx::move(shm));
     printf("PORT[%p]: DMA guest [%llx-%llx]  local [%lx-%lx]  offset %lx\n",
