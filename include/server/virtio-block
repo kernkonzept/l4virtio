@@ -417,6 +417,8 @@ public:
    * The client requests reinitialisation of the connection.
    *
    * \return False if reinitialisation is not supported.
+   * \return True if reinitialisation is supported and the client has been
+   *         reinitialised successfully.
    */
   virtual bool reset_client() { return false; }
 
