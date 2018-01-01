@@ -97,7 +97,7 @@ enum L4virtio_feature_bits
   /// Virtio protocol version 1 supported. Must be 1 for L4virtio.
   L4VIRTIO_FEATURE_VERSION_1  = 32,
   /// Status and queue config are set via cmd field instead of via IPC.
-  L4VIRTIO_FEATURE_CMD_CONFIG = 33
+  L4VIRTIO_FEATURE_CMD_CONFIG = 224
 };
 
 /**
