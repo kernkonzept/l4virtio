@@ -686,7 +686,7 @@ public:
   /// callback for client queue-config request
   virtual int reconfig_queue(unsigned idx) = 0;
 
-  /// callback for registering a singe guest IRQ for all queues
+  /// callback for registering a single guest IRQ for all queues
   virtual void register_single_driver_irq() = 0;
 
   /// callback to gather the device notification IRQ
