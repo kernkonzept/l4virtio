@@ -389,7 +389,6 @@ public:
     set_device_features(df);
 
     _dev_config.priv_config()->capacity = capacity;
-    _dev_config.reset_hdr(); // to publish hardware features
   }
 
 
@@ -538,7 +537,6 @@ private:
       {
         // client has changed, purge all old state
         reset();
-        _dev_config.reset_hdr();
         if (!reset_client())
           L4Re::chksys(-L4_EINVAL, "Client already connected.");
       }
@@ -553,6 +551,7 @@ private:
   {
     _queue.disable();
     _dev_config.reset_queue(0, _vq_max);
+    _dev_config.reset_hdr();
     reset_device();
   }
 
