@@ -485,6 +485,14 @@ public:
     return ret;
   }
 
+  L4::Cap<void> register_obj(L4::Registry_iface *registry,
+                             L4::Cap<L4::Rcv_endpoint> ep)
+  {
+    L4Re::chkcap(registry->register_irq_obj(&_irq_handler));
+
+    return L4Re::chkcap(registry->register_obj(this, ep));
+  }
+
 protected:
   L4::Ipc_svr::Server_iface *server_iface() const
   {
