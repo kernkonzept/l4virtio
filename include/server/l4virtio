@@ -143,6 +143,20 @@ public:
   { return _host_features[idx]; }
 
   /**
+   * Return a specific set of guest features.
+   *
+   * \param idx  Index into the guest features array.
+   *
+   * \retval  The selected set of guest features.
+   *
+   * This function returns a specific 32bit set of features enabled by the
+   * guest/driver. `idx` is the index in the guest features array, resp. the 32
+   * bit set to return.
+   */
+  l4_uint32_t guest_features(unsigned idx) const
+  { return _config->driver_features_map[idx]; }
+
+  /**
    * \brief Get current device status (trusted).
    * \return Current device status register (trusted).
    *
