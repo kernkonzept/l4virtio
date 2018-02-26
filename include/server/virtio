@@ -24,6 +24,7 @@
 #include <l4/cxx/minmax>
 #include <l4/cxx/utils>
 
+#include <limits.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -280,14 +281,16 @@ struct Data_buffer
   /**
    * \brief Copy contents from this buffer to the destination buffer.
    * \param dst  Destination buffer.
+   * \param max  (optional) Maximum number of bytes to copy.
    * \return the number of bytes copied.
    *
-   * This function copies the maximum number of bytes from this to
-   * \a dst.
+   * This function copies at most `max` bytes from this to `dst`. If
+   * `max` is omitted, copies the maximum number of bytes available
+   * that fit `dst`.
    */
-  l4_uint32_t copy_to(Data_buffer *dst)
+  l4_uint32_t copy_to(Data_buffer *dst, l4_uint32_t max = UINT_MAX)
   {
-    unsigned long bytes = cxx::min(left, dst->left);
+    unsigned long bytes = cxx::min(cxx::min(left, dst->left), max);
     memcpy(dst->pos, pos, bytes);
     left -= bytes;
     pos += bytes;
