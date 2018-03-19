@@ -432,11 +432,13 @@ public:
 
     _flags.rw() = ds_info.flags & L4Re::Dataspace::Map_rw;
 
+    // use a big alignment to save PT/TLB entries and kernel memory resources!
     chksys(Env::env()->rm()->attach(&_local_base, size,
                                     L4Re::Rm::Search_addr | (_flags.rw() ? 0 : L4Re::Rm::Read_only),
                                     L4::Ipc::make_cap(ds.get(), _flags.rw()
                                                                 ? L4_CAP_FPAGE_RW
-                                                                : L4_CAP_FPAGE_RO), _ds_offset));
+                                                                : L4_CAP_FPAGE_RO),
+                                    _ds_offset, L4_SUPERPAGESHIFT));
 
     _size = size;
     _ds = cxx::move(ds);
