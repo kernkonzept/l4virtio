@@ -409,28 +409,42 @@ public:
     using L4Re::Env;
 
     L4Re::Dataspace::Stats ds_info = L4Re::Dataspace::Stats();
-    chksys(ds->info(&ds_info), "getting data-space infos");
+    // Sometimes we work with dataspaces that do not implement all dataspace
+    // methods and return an error instead. An example of such a dataspace is
+    // io's Vi::System_bus. We detect this case when the info method returns
+    // -L4_ENOSYS and simply assume the dataspace is good for us.
+    long err = ds->info(&ds_info);
+    if (err >= 0)
+      {
+        l4_addr_t ds_size = l4_round_page(ds_info.size);
 
-    l4_addr_t ds_size = l4_round_page(ds_info.size);
+        if (ds_size < L4_PAGESIZE)
+          chksys(-L4_EINVAL, "DS too small");
 
-    if (ds_size < L4_PAGESIZE)
-      chksys(-L4_EINVAL, "DS too small");
+        if (_ds_offset >= ds_size)
+          chksys(-L4_ERANGE, "offset larger than DS size");
 
-    if (_ds_offset >= ds_size)
-      chksys(-L4_ERANGE, "offset larger than DS size");
+        size = l4_round_page(size);
+        if (size > ds_size)
+          chksys(-L4_EINVAL, "size larger than DS size");
 
-    size = l4_round_page(size);
-    if (size > ds_size)
-      chksys(-L4_EINVAL, "size larger than DS size");
+        if (_ds_offset > ds_size - size)
+          chksys(-L4_EINVAL, "invalid offset or size");
 
-    if (_ds_offset > ds_size - size)
-      chksys(-L4_EINVAL, "invalid offset or size");
+        // overflow check
+        if ((ULLONG_MAX - size) < _drv_base)
+          chksys(-L4_EINVAL, "invalid size");
 
-    // overflow check
-    if ((ULLONG_MAX - size) < _drv_base)
-      chksys(-L4_EINVAL, "invalid size");
-
-    _flags.rw() = ds_info.flags & L4Re::Dataspace::Map_rw;
+        _flags.rw() = ds_info.flags & L4Re::Dataspace::Map_rw;
+      }
+    else if (err == -L4_ENOSYS)
+      {
+        _flags.rw() = true;
+      }
+    else
+      {
+        chksys(err, "getting data-space infos");
+      }
 
     // use a big alignment to save PT/TLB entries and kernel memory resources!
     chksys(Env::env()->rm()->attach(&_local_base, size,
