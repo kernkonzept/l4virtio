@@ -238,6 +238,10 @@ struct Block_features : public Dev_config::Features
   CXX_BITFIELD_MEMBER( 6,  6, blk_size, raw);
   /** Device exports information about optimal IO alignment. */
   CXX_BITFIELD_MEMBER(10, 10, topology, raw);
+  /** Device can support discard command. */
+  CXX_BITFIELD_MEMBER(13, 13, discard, raw);
+  /** Device can support write zeroes command. */
+  CXX_BITFIELD_MEMBER(14, 14, write_zeroes, raw);
 };
 
 
@@ -365,6 +369,46 @@ protected:
     set_device_features(df);
   }
 
+  /**
+   * Sets constraints for and enables the discard command.
+   *
+   * \param max_discard_sectors Maximum discard sectors size.
+   * \param max_discard_seg Maximum discard segment number.
+   * \param discard_sector_alignment Can be used by the driver when splitting a
+   *                                 request based on alignment.
+   */
+  void set_discard(l4_uint32_t max_discard_sectors, l4_uint32_t max_discard_seg,
+                   l4_uint32_t discard_sector_alignment)
+  {
+    l4virtio_block_config_t volatile *pc = _dev_config.priv_config();
+    pc->max_discard_sectors = max_discard_sectors;
+    pc->max_discard_seg = max_discard_seg;
+    pc->discard_sector_alignment = discard_sector_alignment;
+    Block_features df = device_features();
+    df.discard() = true;
+    set_device_features(df);
+  }
+
+  /**
+   * Sets constraints for and enables the write zeroes command.
+   *
+   * \param max_write_zeroes_sectors Maximum write zeroes sectors size.
+   * \param max_write_zeroes_seg maximum write zeroes segment number.
+   * \param write_zeroes_may_unmap Set if a write zeroes request can result in
+   *                               deallocating one or more sectors.
+   */
+  void set_write_zeroes(l4_uint32_t max_write_zeroes_sectors,
+                        l4_uint32_t max_write_zeroes_seg,
+                        l4_uint8_t write_zeroes_may_unmap)
+  {
+    l4virtio_block_config_t volatile *pc = _dev_config.priv_config();
+    pc->max_write_zeroes_sectors = max_write_zeroes_sectors;
+    pc->max_write_zeroes_seg = max_write_zeroes_seg;
+    pc->write_zeroes_may_unmap = write_zeroes_may_unmap;
+    Block_features df = device_features();
+    df.write_zeroes() = true;
+    set_device_features(df);
+  }
 
 public:
   /**
