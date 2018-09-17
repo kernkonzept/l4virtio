@@ -24,6 +24,7 @@
 #include <l4/re/error_helper>
 #include <l4/re/rm>
 #include <l4/re/util/cap_alloc>
+#include <l4/re/util/shared_cap>
 #include <l4/re/util/unique_cap>
 
 #include <l4/sys/types.h>
@@ -61,7 +62,7 @@ public:
 
 private:
   typedef L4Re::Rm::Unique_region< l4virtio_config_hdr_t*> Cfg_region;
-  typedef L4Re::Util::Unique_cap<L4Re::Dataspace> Cfg_cap;
+  typedef L4Re::Util::Shared_cap<L4Re::Dataspace> Cfg_cap;
 
   l4_uint32_t _vendor, _device, _qoffset, _nqueues;
   l4_uint32_t _host_features[sizeof(l4virtio_config_hdr_t::dev_features_map)
@@ -75,6 +76,24 @@ private:
   static l4_uint32_t align(l4_uint32_t x)
   { return (x + 0xfU) & ~0xfU; }
 
+  void attach_n_init_cfg(Cfg_cap const &cfg, l4_addr_t offset)
+  {
+    L4Re::chksys(L4Re::Env::env()->rm()->attach(&_config, L4_PAGESIZE,
+                                                L4Re::Rm::Search_addr,
+                                                L4::Ipc::make_cap_rw(cfg.get()),
+                                                offset),
+                 "Attach config space to local address space.");
+
+    _config->generation = 0;
+    memset(_config->driver_features_map, 0, sizeof(_config->driver_features_map));
+    memset(_host_features, 0, sizeof(_host_features));
+    set_host_feature(L4VIRTIO_FEATURE_VERSION_1);
+    reset_hdr();
+
+    _ds = cfg;
+    _ds_offset = offset;
+  }
+
 protected:
   void volatile *get_priv_config() const
   {
@@ -84,7 +103,8 @@ protected:
 public:
 
   /**
-   * \brief Setup/Create a L4-Virtio config data space.
+   * Create a L4-Virtio config data space.
+   *
    * \param vendor      The vendor ID to store in config header.
    * \param device      The device ID to store in config header.
    * \param cfg_size    The size of the device-specific config data in bytes.
@@ -104,9 +124,6 @@ public:
     using L4Re::chkcap;
     using L4Re::chksys;
 
-    //if (_cfg_offset + align(cfg_size) >= L4_PAGESIZE)
-      // hm what to do
-
     if (sizeof(l4virtio_config_queue_t) * _nqueues + _qoffset > L4_PAGESIZE)
       {
         // too many queues does not fit into our page
@@ -114,18 +131,38 @@ public:
         _nqueues = 0;
       }
 
-    typedef L4Re::Util::Unique_cap<L4Re::Dataspace> Cfg_cap;
-    Cfg_cap cfg = chkcap(L4Re::Util::make_unique_cap<Dataspace>());
+    auto cfg = chkcap(L4Re::Util::make_shared_cap<Dataspace>());
     chksys(L4Re::Env::env()->mem_alloc()->alloc(L4_PAGESIZE, cfg.get()));
-    chksys(L4Re::Env::env()->rm()->attach(&_config, L4_PAGESIZE,
-                                          L4Re::Rm::Search_addr,
-                                          L4::Ipc::make_cap_rw(cfg.get())));
-    _ds = cxx::move(cfg);
-    _config->generation = 0;
-    memset(_config->driver_features_map, 0, sizeof (_config->driver_features_map));
-    memset(_host_features, 0, sizeof(_host_features));
-    _host_features[1] = 1; // virtio 1
-    reset_hdr();
+
+    attach_n_init_cfg(cfg, 0);
+  }
+
+  /**
+   * Setup an L4-Virtio config space in an existing data space.
+   *
+   * \param cfg         Dataspace that should hold the L4-Virtio configuration.
+   * \param cfg_offset  Offset into the dataspace where the configuration starts.
+   * \param vendor      The vendor ID to store in config header.
+   * \param device      The device ID to store in config header.
+   * \param cfg_size    The size of the device-specific config data in bytes.
+   * \param num_queues  The number of queues provided by the device.
+   *
+   */
+  Dev_config(Cfg_cap const &cfg, l4_addr_t cfg_offset,
+             l4_uint32_t vendor, l4_uint32_t device,
+             unsigned cfg_size, l4_uint32_t num_queues = 0)
+  : _vendor(vendor), _device(device),
+    _qoffset(0x100 + align(cfg_size)),
+    _nqueues(num_queues)
+  {
+    if (sizeof(l4virtio_config_queue_t) * _nqueues + _qoffset > L4_PAGESIZE)
+      {
+        // too many queues does not fit into our page
+        _qoffset = 0;
+        _nqueues = 0;
+      }
+
+    attach_n_init_cfg(cfg, cfg_offset);
   }
 
   void set_host_feature(unsigned feature)
@@ -339,7 +376,8 @@ public:
   typedef PRIV_CONFIG Priv_config;
 
   /**
-   * \brief Setup/Create a L4-Virtio config data space.
+   * Create and set up a L4-Virtio config data space.
+   *
    * \param vendor      The vendor ID to store in config header.
    * \param device      The device ID to store in config header.
    * \param num_queues  The number of queues provided by the device.
@@ -351,6 +389,23 @@ public:
   Dev_config_t(l4_uint32_t vendor, l4_uint32_t device,
                l4_uint32_t num_queues = 0)
   : Dev_config(vendor, device, sizeof(PRIV_CONFIG), num_queues)
+  {}
+
+  /**
+   * Setup an L4-Virtio config space in an existing data space.
+   *
+   * \param cfg         Dataspace that should hold the L4-Virtio configuration.
+   * \param cfg_offset  Offset into the dataspace where the configuration starts.
+   * \param vendor      The vendor ID to store in config header.
+   * \param device      The device ID to store in config header.
+   * \param num_queues  The number of queues provided by the device.
+   *
+   */
+  Dev_config_t(L4Re::Util::Shared_cap<L4Re::Dataspace> const &cfg,
+               l4_addr_t cfg_offset, l4_uint32_t vendor, l4_uint32_t device,
+               l4_uint32_t num_queues = 0)
+  : Dev_config(cfg, cfg_offset, vendor, device, sizeof(PRIV_CONFIG),
+               num_queues)
   {}
 
   /**
