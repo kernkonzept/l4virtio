@@ -446,7 +446,7 @@ public:
    * For asynchronous mode, the function should set up the worker
    * and then return false. In synchronous mode, the function should
    * return true, once processing is complete. If there is an error
-   * and processing is aborted, the status flag of @req needs to be set
+   * and processing is aborted, the status flag of `req` needs to be set
    * accordingly and the request immediately finished with finish_request()
    * if the client is to be answered.
    */
