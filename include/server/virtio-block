@@ -546,7 +546,7 @@ protected:
 
   void kick()
   {
-    if (queue_stopped())
+    if (!_queue.ready() || queue_stopped())
       return;
 
     while (!_dev_config.status().failed())
