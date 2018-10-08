@@ -20,7 +20,7 @@
 
 namespace L4virtio { namespace Svr {
 
-template <typename Ds_data> class Block_dev;
+template <typename Ds_data> class Block_dev_base;
 
 /**
  * A request to read or write data.
@@ -28,7 +28,7 @@ template <typename Ds_data> class Block_dev;
 template<typename Ds_data>
 class Block_request
 {
-  friend Block_dev<Ds_data>;
+  friend class Block_dev_base<Ds_data>;
   enum { Header_size = sizeof(l4virtio_block_header_t) };
 
 public:
@@ -255,15 +255,13 @@ struct Block_features : public Dev_config::Features
  * Use this class as a base to implement your own specific block device.
  */
 template <typename Ds_data>
-class Block_dev
-: public L4virtio::Svr::Device_t<Ds_data>,
-  public L4::Epiface_t<Block_dev<Ds_data>, L4virtio::Device>
+class Block_dev_base : public L4virtio::Svr::Device_t<Ds_data>
 {
 private:
   class Irq_object : public L4::Irqep_t<Irq_object>
   {
   public:
-    Irq_object(Block_dev<Ds_data> *parent) : _parent(parent) {}
+    Irq_object(Block_dev_base<Ds_data> *parent) : _parent(parent) {}
 
     void handle_irq()
     {
@@ -271,10 +269,15 @@ private:
     }
 
   private:
-    Block_dev<Ds_data> *_parent;
+    Block_dev_base<Ds_data> *_parent;
   };
   Irq_object _irq_handler;
 
+protected:
+  L4::Epiface *irq_iface()
+  { return &_irq_handler; }
+
+private:
   L4Re::Util::Unique_cap<L4::Irq> _kick_guest_irq;
   Virtqueue _queue;
   unsigned _vq_max;
@@ -457,11 +460,10 @@ public:
    * \param capacity   Size of the device in 512-byte sectors.
    * \param read_only  True, if the device should not be writable.
    */
-  Block_dev(l4_uint32_t vendor, unsigned queue_size,
-            l4_uint64_t capacity, bool read_only)
-  : L4virtio::Svr::Device_t<Ds_data>(&_dev_config),
-    _irq_handler(this), _vq_max(queue_size),
-    _dev_config(vendor, L4VIRTIO_ID_BLOCK, 1)
+  Block_dev_base(l4_uint32_t vendor, unsigned queue_size, l4_uint64_t capacity,
+                 bool read_only)
+  : L4virtio::Svr::Device_t<Ds_data>(&_dev_config), _irq_handler(this),
+    _vq_max(queue_size), _dev_config(vendor, L4VIRTIO_ID_BLOCK, 1)
   {
     this->reset_queue_config(0, queue_size);
 
@@ -544,44 +546,7 @@ public:
     return -L4_EINVAL;
   }
 
-  /**
-   * Attach device to an object registry.
-   *
-   * \param registry Object registry that will be responsible for dispatching
-   *                 requests.
-   * \param service  Name of an existing capability the device should use.
-   *
-   * This functions registers the general virtio interface as well as the
-   * interrupt handler which is used for receiving client notifications.
-   */
-  L4::Cap<void> register_obj(L4::Registry_iface *registry,
-                             char const *service = 0)
-  {
-    L4Re::chkcap(registry->register_irq_obj(&_irq_handler));
-    L4::Cap<void> ret;
-    if (service)
-      ret = registry->register_obj(this, service);
-    else
-      ret = registry->register_obj(this);
-    L4Re::chkcap(ret);
-
-    return ret;
-  }
-
-  L4::Cap<void> register_obj(L4::Registry_iface *registry,
-                             L4::Cap<L4::Rcv_endpoint> ep)
-  {
-    L4Re::chkcap(registry->register_irq_obj(&_irq_handler));
-
-    return L4Re::chkcap(registry->register_obj(this, ep));
-  }
-
 protected:
-  L4::Ipc_svr::Server_iface *server_iface() const
-  {
-    return L4::Epiface::server_iface();
-  }
-
   void kick()
   {
     if (!_queue.ready() || queue_stopped())
@@ -626,9 +591,9 @@ private:
       }
 
     _kick_guest_irq = L4Re::Util::Unique_cap<L4::Irq>(
-        L4Re::chkcap(server_iface()->template rcv_cap<L4::Irq>(0)));
+      L4Re::chkcap(this->server_iface()->template rcv_cap<L4::Irq>(0)));
 
-    L4Re::chksys(server_iface()->realloc_rcv_cap(0));
+    L4Re::chksys(this->server_iface()->realloc_rcv_cap(0));
   }
 
   void reset()
@@ -648,6 +613,52 @@ private:
       }
 
     return true;
+  }
+};
+
+template <typename Ds_data>
+struct Block_dev
+: Block_dev_base<Ds_data>,
+  L4::Epiface_t<Block_dev<Ds_data>, L4virtio::Device>
+{
+  using Block_dev_base<Ds_data>::Block_dev_base;
+
+  /**
+   * Attach device to an object registry.
+   *
+   * \param registry Object registry that will be responsible for dispatching
+   *                 requests.
+   * \param service  Name of an existing capability the device should use.
+   *
+   * This functions registers the general virtio interface as well as the
+   * interrupt handler which is used for receiving client notifications.
+   */
+  L4::Cap<void> register_obj(L4::Registry_iface *registry,
+                             char const *service = 0)
+  {
+    L4Re::chkcap(registry->register_irq_obj(this->irq_iface()));
+    L4::Cap<void> ret;
+    if (service)
+      ret = registry->register_obj(this, service);
+    else
+      ret = registry->register_obj(this);
+    L4Re::chkcap(ret);
+
+    return ret;
+  }
+
+  L4::Cap<void> register_obj(L4::Registry_iface *registry,
+                             L4::Cap<L4::Rcv_endpoint> ep)
+  {
+    L4Re::chkcap(registry->register_irq_obj(this->irq_iface()));
+
+    return L4Re::chkcap(registry->register_obj(this, ep));
+  }
+
+protected:
+  L4::Ipc_svr::Server_iface *server_iface() const override
+  {
+    return this->L4::Epiface::server_iface();
   }
 };
 
