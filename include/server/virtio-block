@@ -236,8 +236,12 @@ struct Block_features : public Dev_config::Features
   CXX_BITFIELD_MEMBER( 5,  5, ro, raw);
   /** Block size of disk is in blk_size. */
   CXX_BITFIELD_MEMBER( 6,  6, blk_size, raw);
+  /** Cache flush command support. */
+  CXX_BITFIELD_MEMBER( 9,  9, flush, raw);
   /** Device exports information about optimal IO alignment. */
   CXX_BITFIELD_MEMBER(10, 10, topology, raw);
+  /** Device can toggle its cache between writeback and writethrough modes. */
+  CXX_BITFIELD_MEMBER(11, 11, config_wce, raw);
   /** Device can support discard command. */
   CXX_BITFIELD_MEMBER(13, 13, discard, raw);
   /** Device can support write zeroes command. */
@@ -370,6 +374,37 @@ protected:
     Block_features df = device_features();
     df.topology() = true;
     set_device_features(df);
+  }
+
+  /** Enables the flush command. */
+  void set_flush()
+  {
+    Block_features df = device_features();
+    df.flush() = true;
+    set_device_features(df);
+  }
+
+  /** Sets cache mode and enables the the writeback toggle.
+   *
+   * \param writeback Mode of the cache (0 for writethrough, 1 for writeback).
+   */
+  void set_config_wce(l4_uint8_t writeback)
+  {
+    l4virtio_block_config_t volatile *pc = _dev_config.priv_config();
+    pc->writeback = writeback;
+    Block_features df = device_features();
+    df.config_wce() = true;
+    set_device_features(df);
+  }
+
+  /** Get the writeback field from the configuration space.
+   *
+   * \return Value of the writeback field.
+   */
+  l4_uint8_t get_writeback()
+  {
+    l4virtio_block_config_t volatile *pc = _dev_config.priv_config();
+    return pc->writeback;
   }
 
   /**

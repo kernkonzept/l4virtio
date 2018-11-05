@@ -100,7 +100,8 @@ typedef struct l4virtio_block_config_t
     /**  Suggested optimal (i.e. maximum) I/O size in blocks */
     l4_uint32_t opt_io_size;
   } topology;
-  l4_uint8_t unused0[4];
+  l4_uint8_t writeback;
+  l4_uint8_t unused0[3];
   l4_uint32_t max_discard_sectors;
   l4_uint32_t max_discard_seg;
   l4_uint32_t discard_sector_alignment;
