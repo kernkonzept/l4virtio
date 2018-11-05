@@ -158,6 +158,20 @@ public:
   { return _config->driver_features_map[idx]; }
 
   /**
+   * Compute a specific set of negotiated features.
+   *
+   * \param idx  Index into the guest/host features array.
+   *
+   * \retval  The selected set of negotiated features.
+   *
+   * This function returns a specific 32-bit set of features negotiated by the
+   * guest/driver and host/device. `idx` is the index in the guest/host features
+   * array, resp. the 32-bit set to return.
+   */
+  l4_uint32_t negotiated_features(unsigned idx) const
+  { return _config->driver_features_map[idx] & _host_features[idx]; }
+
+  /**
    * \brief Get current device status (trusted).
    * \return Current device status register (trusted).
    *
@@ -733,6 +747,10 @@ public:
   /// reset callback, called for doing a device reset
   virtual void reset() = 0;
 
+  /// callback for checking the subset of accepted features
+  virtual bool check_features()
+  { return true; }
+
   /// callback for checking if the queues at DRIVER_OK transition
   virtual bool check_queues() = 0;
 
@@ -1105,6 +1123,25 @@ private:
     check_n_init_shm(cxx::move(ds), base, size, offset);
   }
 
+  bool check_features_internal()
+  {
+    static_assert(sizeof(l4virtio_config_hdr_t::driver_features_map)
+                    == sizeof(l4virtio_config_hdr_t::dev_features_map),
+                  "Driver and device feature maps must be of the same size");
+
+    for (auto i = 0u;
+         i < sizeof(l4virtio_config_hdr_t::driver_features_map)
+               / sizeof(l4virtio_config_hdr_t::driver_features_map[0]);
+         i++)
+      {
+        // Driver must not accept features that were not offered by device
+        if (_device_config->guest_features(i)
+            & ~_device_config->host_features(i))
+          return false;
+      }
+    return check_features();
+  }
+
   int _set_status(unsigned _status)
   {
     Dev_config::Status status(_status);
@@ -1118,6 +1155,10 @@ private:
     // do nothing if 'failed' is set
     if (status.failed())
       return 0;
+
+    if (!status.driver_ok() && status.features_ok()
+        && !check_features_internal())
+      status.features_ok() = 0;
 
     if (status.running() && !check_queues())
       status.failed() = 1;

@@ -281,6 +281,9 @@ public:
   typedef Block_request<Ds_data> Request;
 
 protected:
+  Block_features negotiated_features() const
+  { return _dev_config.negotiated_features(0); }
+
   Block_features device_features() const
   { return _dev_config.host_features(0); }
 
