@@ -525,7 +525,7 @@ public:
   void finalize_request(cxx::unique_ptr<Request> req, unsigned sz,
                         l4_uint8_t status = L4VIRTIO_BLOCK_S_OK)
   {
-    if (_dev_config.status().failed())
+    if (_dev_config.status().failed() || !_queue.ready())
       return;
 
     if (req->release_request(&_queue, status, sz) < 0)
