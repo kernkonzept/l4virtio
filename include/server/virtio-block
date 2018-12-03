@@ -546,6 +546,14 @@ public:
     return -L4_EINVAL;
   }
 
+  void reset()
+  {
+    _queue.disable();
+    _dev_config.reset_queue(0, _vq_max);
+    _dev_config.reset_hdr();
+    reset_device();
+  }
+
 protected:
   void kick()
   {
@@ -594,14 +602,6 @@ private:
       L4Re::chkcap(this->server_iface()->template rcv_cap<L4::Irq>(0)));
 
     L4Re::chksys(this->server_iface()->realloc_rcv_cap(0));
-  }
-
-  void reset()
-  {
-    _queue.disable();
-    _dev_config.reset_queue(0, _vq_max);
-    _dev_config.reset_hdr();
-    reset_device();
   }
 
   bool check_queues()
