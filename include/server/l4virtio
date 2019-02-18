@@ -256,7 +256,7 @@ public:
    * \brief Set device status failed bit.
    *
    * This function sets the internal status register and also the status
-   * register in the shared memory to \a status.
+   * register in the shared memory to failed.
    */
   void set_failed()
   {
@@ -322,7 +322,7 @@ public:
   /**
    * \brief Reset queue config for the given queue.
    * \param index    The index of the queue to reset.
-   * \param num_max  The maximum number of descriptor supported by this queue.
+   * \param num_max  The maximum number of descriptors supported by this queue.
    * \param inc_generation The config generation will be incremented when
    *                       this is true.
    * \return true on success, or false when \a index is out of range.
@@ -993,7 +993,7 @@ public:
    *
    * This function resets the driver-readable configuration space for the
    * queue with the given index. The queue configuration is reset to all 0,
-   * name num_max to the given value.
+   * and the maximum number of entries in the queue is set to \a num_max.
    */
   void reset_queue_config(unsigned idx, unsigned num_max,
                           bool inc_generation = false)
