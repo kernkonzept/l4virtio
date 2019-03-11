@@ -1207,9 +1207,12 @@ private:
         reset();
       }
 
-    // do nothing if 'failed' is set
+    // do no further processing if 'failed' is set
     if (status.failed())
-      return 0;
+      {
+        _device_config->set_status(status);
+        return 0;
+      }
 
     if (!status.driver_ok() && status.features_ok()
         && !check_features_internal())
