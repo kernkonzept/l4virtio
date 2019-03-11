@@ -155,7 +155,7 @@ public:
 
   /**
    * \brief Test for available descriptors.
-   * \return true if there are descriptors availabale, false if not.
+   * \return true if there are descriptors available, false if not.
    * \pre The queue must be in working state.
    */
   bool desc_avail() const
@@ -418,7 +418,7 @@ public:
   /**
    * Start processing a new request.
    *
-   * \tparam DESCM_MAN  Type of descriptor manager (implicit).
+   * \tparam DESC_MAN   Type of descriptor manager (implicit).
    * \param  dm         Descriptor manager that is used to translate VIRTIO
    *                    descriptor addresses.
    * \param  ring       VIRTIO ring of the request.
@@ -455,7 +455,7 @@ public:
 
   /**
    * \brief Start processing a new request.
-   * \tparam DESCM_MAN  Type of descriptor manager (implicit).
+   * \tparam DESC_MAN  Type of descriptor manager (implicit).
    * \param dm       Descriptor manager that is used to translate VIRTIO descriptor addresses.
    * \param request  VIRTIO request from Virtqueue::next_avail()
    * \param args     Extra arguments passed to dm->load_desc()
@@ -476,7 +476,7 @@ public:
   { return _current.flags; }
 
   /**
-   * \brief Are there more chained descriptors ?
+   * \brief Are there more chained descriptors?
    * \return true if there are more chained descriptors in the current request.
    */
   bool has_more() const
@@ -485,7 +485,7 @@ public:
   /**
    * Switch to the next descriptor in a descriptor chain.
    *
-   * \tparam DESCM_MAN  Type of descriptor manager (implicit).
+   * \tparam DESC_MAN   Type of descriptor manager (implicit).
    * \param  dm         Descriptor manager that is used to translate VIRTIO
    *                    descriptor addresses.
    * \param  args       Extra arguments passed to dm->load_desc()
@@ -518,4 +518,3 @@ public:
 
 }
 }
-
