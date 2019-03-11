@@ -51,6 +51,11 @@ enum L4virtio_magic
   L4VIRTIO_MAGIC = 0x74726976
 };
 
+enum L4virtio_vendor
+{
+  L4VIRTIO_VENDOR_KK = 0x44
+};
+
 /** L4-VIRTIO opcodes */
 enum L4_virtio_opcodes
 {
