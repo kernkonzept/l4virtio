@@ -512,7 +512,7 @@ public:
         if ((ULLONG_MAX - size) < _drv_base)
           chksys(-L4_EINVAL, "invalid size");
 
-        _flags.rw() = ds_info.flags & L4Re::Dataspace::Map_rw;
+        _flags.rw() = (ds_info.flags & L4Re::Dataspace::Map_w) != 0;
       }
     else if (err == -L4_ENOSYS)
       {
