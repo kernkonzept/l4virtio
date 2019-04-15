@@ -79,7 +79,7 @@ private:
   void attach_n_init_cfg(Cfg_cap const &cfg, l4_addr_t offset)
   {
     L4Re::chksys(L4Re::Env::env()->rm()->attach(&_config, L4_PAGESIZE,
-                                                L4Re::Rm::Search_addr,
+                                                L4Re::Rm::F::Search_addr | L4Re::Rm::F::RW,
                                                 L4::Ipc::make_cap_rw(cfg.get()),
                                                 offset),
                  "Attach config space to local address space.");
@@ -512,7 +512,7 @@ public:
         if ((ULLONG_MAX - size) < _drv_base)
           chksys(-L4_EINVAL, "invalid size");
 
-        _flags.rw() = (ds_info.flags & L4Re::Dataspace::Map_w) != 0;
+        _flags.rw() = (ds_info.flags & L4Re::Dataspace::F::W).raw != 0;
       }
     else if (err == -L4_ENOSYS)
       {
@@ -523,9 +523,12 @@ public:
         chksys(err, "getting data-space infos");
       }
 
+    auto f = L4Re::Rm::F::Search_addr | L4Re::Rm::F::R;
+    if (_flags.rw())
+      f |= L4Re::Rm::F::W;
+
     // use a big alignment to save PT/TLB entries and kernel memory resources!
-    chksys(Env::env()->rm()->attach(&_local_base, size,
-                                    L4Re::Rm::Search_addr | (_flags.rw() ? 0 : L4Re::Rm::Read_only),
+    chksys(Env::env()->rm()->attach(&_local_base, size, f,
                                     L4::Ipc::make_cap(ds.get(), _flags.rw()
                                                                 ? L4_CAP_FPAGE_RW
                                                                 : L4_CAP_FPAGE_RO),
