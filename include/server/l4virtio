@@ -1041,6 +1041,8 @@ public:
   {
     l4virtio_config_queue_t volatile const *qc;
     qc = _device_config->qconfig(qn);
+    if (L4_UNLIKELY(qc == 0))
+      return false;
 
     if (!qc->ready)
       {
