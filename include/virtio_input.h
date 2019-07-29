@@ -27,7 +27,7 @@
 /**
  * Device information selectors
  */
-enum L4virtio_iput_config_select
+enum L4virtio_input_config_select
 {
   L4VIRTIO_INPUT_CFG_UNSET = 0,
   L4VIRTIO_INPUT_CFG_ID_NAME = 1,
