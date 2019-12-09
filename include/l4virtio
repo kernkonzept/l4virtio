@@ -108,9 +108,9 @@ public:
   /**
    * Write the VIRTIO status register.
    *
-   * \param status Status word to write to the VIRTIO status.
+   * \param status  Status word to write to the VIRTIO status.
    *
-   * \return 0 on success, <0 on error.
+   * \retval 0 on success.
    *
    * \note All other registers are accessed via shared memory.
    */

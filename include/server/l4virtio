@@ -1233,6 +1233,13 @@ private:
         return 0;
       }
 
+    // enforce correct initialization sequence
+    if ((!status.acked() && status.driver())
+        || (!status.driver() && status.features_ok())
+        || (!status.features_ok() && status.driver_ok()))
+      status.failed() = 1;
+
+    // only check feature compatiblity before DRIVER_OK is set
     if (!status.driver_ok() && status.features_ok()
         && !check_features_internal())
       status.features_ok() = 0;
