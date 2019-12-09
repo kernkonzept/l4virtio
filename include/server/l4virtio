@@ -174,6 +174,9 @@ public:
   bool get_host_feature(unsigned feature)
   { return l4virtio_get_feature(_host_features, feature); }
 
+  bool get_guest_feature(unsigned feature)
+  { return l4virtio_get_feature(_config->driver_features_map, feature); }
+
   l4_uint32_t &host_features(unsigned idx)
   { return _host_features[idx]; }
 
@@ -1188,6 +1191,16 @@ private:
     static_assert(sizeof(l4virtio_config_hdr_t::driver_features_map)
                     == sizeof(l4virtio_config_hdr_t::dev_features_map),
                   "Driver and device feature maps must be of the same size");
+
+    // From the Virtio 1.0 specification 6.1 Driver Requirements and 6.2 Device
+    // Requirements: A driver MUST accept VIRTIO_F_VERSION_1 if it is offered.
+    // A device MUST offer VIRTIO_F_VERSION_1. A device MAY fail to operate
+    // further if VIRTIO_F_VERSION_1 is not accepted.
+    //
+    // The L4virtio implementation does not support legacy interfaces so we
+    // fail here if the Virtio 1.0 feature was not accepted.
+    if (!_device_config->get_guest_feature(L4VIRTIO_FEATURE_VERSION_1))
+      return false;
 
     for (auto i = 0u;
          i < sizeof(l4virtio_config_hdr_t::driver_features_map)
