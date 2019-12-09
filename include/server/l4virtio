@@ -10,6 +10,7 @@
 #include <limits.h>
 
 #include <l4/re/dataspace>
+#include <l4/re/util/debug>
 #include <l4/re/env>
 #include <l4/re/error_helper>
 #include <l4/re/rm>
@@ -885,8 +886,9 @@ public:
                       L4::Ipc::Snd_fpage ds_cap_fp, l4_uint64_t ds_base,
                       l4_umword_t offset, l4_umword_t sz)
   {
-    printf("Registering dataspace from 0x%llx with %lu KiB, offset 0x%lx\n",
-           ds_base, sz >> 10, offset);
+    L4Re::Util::Dbg()
+      .printf("Registering dataspace from 0x%llx with %lu KiB, offset 0x%lx\n",
+              ds_base, sz >> 10, offset);
 
     _check_n_init_shm(ds_cap_fp, ds_base, sz, offset);
 
@@ -908,8 +910,9 @@ public:
 
     register_single_driver_irq();
 
-    printf("register client: host IRQ: %lx config DS: %lx\n",
-           device_notify_irq().cap(), _device_config->ds().cap());
+    L4Re::Util::Dbg()
+      .printf("register client: host IRQ: %lx config DS: %lx\n",
+              device_notify_irq().cap(), _device_config->ds().cap());
 
     host_irq = L4::Ipc::make_cap(device_notify_irq(), L4_CAP_FPAGE_RO);
     config_ds = L4::Ipc::make_cap(_device_config->ds(), L4_CAP_FPAGE_RW);
@@ -920,8 +923,9 @@ public:
                         L4::Ipc::Cap<L4Re::Dataspace> &config_ds,
                         l4_addr_t &ds_offset)
   {
-    printf("register client: host IRQ: %lx config DS: %lx\n",
-           device_notify_irq().cap(), _device_config->ds().cap());
+    L4Re::Util::Dbg()
+      .printf("register client: host IRQ: %lx config DS: %lx\n",
+              device_notify_irq().cap(), _device_config->ds().cap());
 
     config_ds = L4::Ipc::make_cap(_device_config->ds(), L4_CAP_FPAGE_RW);
     ds_offset = _device_config->ds_offset();
@@ -1091,29 +1095,32 @@ public:
     if (L4_UNLIKELY(!used_info || !used_info->is_writable()))
       return false;
 
-    printf("shm=[%llx-%llx] local=[%lx-%lx] desc=[%llx-%llx] (%p-%p)\n",
-           desc_info->drv_base(), desc_info->drv_base() + desc_info->size() - 1,
-           (unsigned long)desc_info->local_base(),
-           (unsigned long)desc_info->local_base() + desc_info->size() - 1,
-           desc, desc + Virtqueue::desc_size(num),
-           desc_info->local(Ptr<char>(desc)),
-           desc_info->local(Ptr<char>(desc)) + Virtqueue::desc_size(num));
+    L4Re::Util::Dbg()
+      .printf("shm=[%llx-%llx] local=[%lx-%lx] desc=[%llx-%llx] (%p-%p)\n",
+              desc_info->drv_base(), desc_info->drv_base() + desc_info->size() - 1,
+              (unsigned long)desc_info->local_base(),
+              (unsigned long)desc_info->local_base() + desc_info->size() - 1,
+              desc, desc + Virtqueue::desc_size(num),
+              desc_info->local(Ptr<char>(desc)),
+              desc_info->local(Ptr<char>(desc)) + Virtqueue::desc_size(num));
 
-    printf("shm=[%llx-%llx] local=[%lx-%lx] avail=[%llx-%llx] (%p-%p)\n",
-           avail_info->drv_base(), avail_info->drv_base() + avail_info->size() - 1,
-           (unsigned long)avail_info->local_base(),
-           (unsigned long)avail_info->local_base() + avail_info->size() - 1,
-           avail, avail + Virtqueue::avail_size(num),
-           avail_info->local(Ptr<char>(avail)),
-           avail_info->local(Ptr<char>(avail)) + Virtqueue::avail_size(num));
+    L4Re::Util::Dbg()
+      .printf("shm=[%llx-%llx] local=[%lx-%lx] avail=[%llx-%llx] (%p-%p)\n",
+              avail_info->drv_base(), avail_info->drv_base() + avail_info->size() - 1,
+              (unsigned long)avail_info->local_base(),
+              (unsigned long)avail_info->local_base() + avail_info->size() - 1,
+              avail, avail + Virtqueue::avail_size(num),
+              avail_info->local(Ptr<char>(avail)),
+              avail_info->local(Ptr<char>(avail)) + Virtqueue::avail_size(num));
 
-    printf("shm=[%llx-%llx] local=[%lx-%lx] used=[%llx-%llx] (%p-%p)\n",
-           used_info->drv_base(), used_info->drv_base() + used_info->size() - 1,
-           (unsigned long)used_info->local_base(),
-           (unsigned long)used_info->local_base() + used_info->size() - 1,
-           used, used + Virtqueue::used_size(num),
-           used_info->local(Ptr<char>(used)),
-           used_info->local(Ptr<char>(used)) + Virtqueue::used_size(num));
+    L4Re::Util::Dbg()
+      .printf("shm=[%llx-%llx] local=[%lx-%lx] used=[%llx-%llx] (%p-%p)\n",
+              used_info->drv_base(), used_info->drv_base() + used_info->size() - 1,
+              (unsigned long)used_info->local_base(),
+              (unsigned long)used_info->local_base() + used_info->size() - 1,
+              used, used + Virtqueue::used_size(num),
+              used_info->local(Ptr<char>(used)),
+              used_info->local(Ptr<char>(used)) + Virtqueue::used_size(num));
 
     q->setup(num, desc_info->local(Ptr<void>(desc)),
              avail_info->local(Ptr<void>(avail)),
@@ -1128,11 +1135,12 @@ public:
       L4Re::chksys(-L4_ENOMEM);
 
     auto const *i = _mem_info.add(base, size, offset, cxx::move(shm));
-    printf("PORT[%p]: DMA guest [%llx-%llx]  local [%lx-%lx]  offset %lx\n",
-           this, i->drv_base(), i->drv_base() + i->size() - 1,
-           (unsigned long)i->local_base(),
-           (unsigned long)i->local_base() + i->size() - 1,
-           i->ds_offset());
+    L4Re::Util::Dbg()
+      .printf("PORT[%p]: DMA guest [%llx-%llx]  local [%lx-%lx]  offset %lx\n",
+              this, i->drv_base(), i->drv_base() + i->size() - 1,
+              (unsigned long)i->local_base(),
+              (unsigned long)i->local_base() + i->size() - 1,
+              i->ds_offset());
   }
 
   /**
@@ -1304,7 +1312,7 @@ private:
   {
     if (new_status == 0)
       {
-        printf("Resetting device\n");
+        L4Re::Util::Dbg().printf("Resetting device\n");
         reset();
         _device_config->reset_hdr(true);
       }
