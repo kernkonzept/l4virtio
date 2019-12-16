@@ -90,6 +90,8 @@ struct Dev_features
  *
  * This class represents a single virtqueue, with a local running available
  * index.
+ *
+ * \note The Virtqueue implementation is not thread-safe.
  */
 class Virtqueue : public L4virtio::Virtqueue
 {
