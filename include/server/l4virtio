@@ -1,19 +1,9 @@
 // vi:ft=cpp
+/* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
 /*
- * (c) 2014 Alexander Warg <warg@os.inf.tu-dresden.de>
+ * Copyright (C) 2014-2020 Kernkonzept GmbH.
+ * Author(s): Alexander Warg <alexander.warg@kernkonzept.com>
  *
- * This file is part of TUD:OS and distributed under the terms of the
- * GNU General Public License 2.
- * Please see the COPYING-GPL-2 file for details.
- *
- * As a special exception, you may use this file as part of a free software
- * library without restriction.  Specifically, if other files instantiate
- * templates or use macros or inline functions from this file, or you compile
- * this file and link it with other files to produce an executable, this
- * file does not by itself cause the resulting executable to be covered by
- * the GNU General Public License.  This exception does not however
- * invalidate any other reasons why the executable file might be covered by
- * the GNU General Public License.
  */
 #pragma once
 
@@ -256,14 +246,14 @@ public:
   }
 
   /**
-   * \brief Set device status failed bit.
+   * Set DEVICE_NEEDS_RESET bit in device status register.
    *
    * This function sets the internal status register and also the status
-   * register in the shared memory to failed.
+   * register in the shared memory to DEVICE_NEEDS_RESET.
    */
-  void set_failed()
+  void set_device_needs_reset()
   {
-    _status.failed() = 1;
+    _status.device_needs_reset() = 1;
     const_cast<l4_uint32_t volatile &>(hdr()->status) = _status.raw;
   }
 
@@ -885,10 +875,7 @@ public:
   long op_config_queue(L4virtio::Device::Rights, unsigned queue)
   {
     Dev_config::Status status = _device_config->status();
-    if (status.failed())
-      return -L4_EIO;
-
-    if (!status.acked() || !status.driver())
+    if (status.fail_state() || !status.acked() || !status.driver())
       return -L4_EIO;
 
     return reconfig_queue(queue);
@@ -1020,17 +1007,24 @@ public:
   }
 
   /**
-   * \brief Transition device into failed state.
-   * \note Callers should trigger a guest config IRQ
-   *       after calling this function.
+   * Transition device into DEVICE_NEEDS_RESET state.
    *
-   * This function does a full reset, (calls reset()) and sets the
-   * failed bit in the device status register.
+   * This function does a full reset, sets the DEVICE_NEEDS_RESET bit in the
+   * device status register, triggering a guest config IRQ if necessary. The
+   * driver still needs to perform its own reset and initialization sequence.
    */
   void device_error()
   {
     reset();
-    _device_config->set_failed();
+    _device_config->set_device_needs_reset();
+
+    // the device MUST NOT notify the driver before DRIVER_OK.
+    if (_device_config->status().driver_ok())
+      {
+        // we do not care about this anywhere, so skip
+        // _dev_config->irq_status |= 1;
+        trigger_driver_config_irq();
+      }
   }
 
   /**
@@ -1218,39 +1212,106 @@ private:
     return check_features();
   }
 
-  int _set_status(unsigned _status)
+  /**
+   * Process the VIRTIO status, determine and update the new value.
+   *
+   * \param status  New status register value to evaluate.
+   *
+   * May call the virtual methods check_features() and check_queues() which may
+   * change the device state.
+   *
+   * From the Virtio 1.0 specification 2.1.2 Device Requirements: Device Status
+   * Field: If DRIVER_OK is set, after it sets DEVICE_NEEDS_RESET, the device
+   * MUST send a device configuration change notification to the driver.
+   *
+   * We understand this to mean a configuration change notification is required
+   * when DEVICE_NEEDS_RESET is set when DRIVER_OK is also set.
+   *
+   * Here no notification is required because check_status() is intended to be
+   * used during initialization where the driver should be checking
+   * fail_state(). When a failure state is detected we avoid transitioning to
+   * DRIVER_OK in cases where we've needed to set DEVICE_NEEDS_RESET by
+   * updating the current status instead of applying the new status.
+   */
+  void check_and_update_status(Dev_config::Status status)
   {
-    Dev_config::Status status(_status);
+    // snapshot of current status
+    Dev_config::Status current_status = _device_config->status();
 
-    if (_status == 0)
+    // handle reset
+    if (!status.raw)
+      {
+        _device_config->set_status(status);
+        return;
+      }
+
+    // Do no further processing in case of driver or device failure. If FAILED
+    // or DEVICE_NEEDS_RESET are set only these fail_state bits will be set in
+    // addition to the current status bits already set.
+    if (current_status.fail_state() || status.fail_state())
+      {
+        if (current_status.fail_state() != status.fail_state())
+          {
+            current_status.fail_state() =
+              current_status.fail_state() | status.fail_state();
+            _device_config->set_status(current_status);
+          }
+        return;
+      }
+
+    // Enforce init sequence ACKNOWLEDGE, DRIVER, FEATURES_OK, DRIVER_OK.
+    // We do not enforce that only one additional new bit is set per call.
+    if ((!status.acked() && status.driver())
+        || (!status.driver() && status.features_ok())
+        || (!status.features_ok() && status.driver_ok()))
+      {
+        current_status.device_needs_reset() = 1;
+        _device_config->set_status(current_status);
+        return;
+      }
+
+    // only check feature compatiblity before DRIVER_OK is set
+    if (status.features_ok() && !status.driver_ok()
+          && !check_features_internal())
+      status.features_ok() = 0;
+
+    // Note that if FEATURES_OK and DRIVER_OK are both updated to being set
+    // at the same time the above check_features_internal() is skipped; this is
+    // considered undefined behaviour but it is not prevented.
+    if (status.running() && !check_queues())
+      {
+        current_status.device_needs_reset() = 1;
+        _device_config->set_status(current_status);
+        return;
+      }
+
+    _device_config->set_status(status);
+  }
+
+  /**
+   * Process the new status transition and conditionally write the status word
+   * to the VIRTIO status register in shared memory.
+   *
+   * \param new_status  Status word to write to the VIRTIO status.
+   *
+   * \retval 0 on success.
+   *
+   * Although DEVICE_NEEDS_RESET may be set using this method, calling
+   * set_device_needs_reset() is the preferred usage since it will send a
+   * configuration change notification if required.
+   */
+  int _set_status(unsigned new_status)
+  {
+    if (new_status == 0)
       {
         printf("Resetting device\n");
         reset();
         _device_config->reset_hdr(true);
       }
 
-    // do no further processing if 'failed' is set
-    if (status.failed())
-      {
-        _device_config->set_status(status);
-        return 0;
-      }
+    Dev_config::Status status(new_status);
+    check_and_update_status(status);
 
-    // enforce correct initialization sequence
-    if ((!status.acked() && status.driver())
-        || (!status.driver() && status.features_ok())
-        || (!status.features_ok() && status.driver_ok()))
-      status.failed() = 1;
-
-    // only check feature compatiblity before DRIVER_OK is set
-    if (!status.driver_ok() && status.features_ok()
-        && !check_features_internal())
-      status.features_ok() = 0;
-
-    if (status.running() && !check_queues())
-      status.failed() = 1;
-
-    _device_config->set_status(status);
     return 0;
   }
 

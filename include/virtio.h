@@ -1,21 +1,10 @@
+/* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
 /*
- * (c) 2013-2014 Alexander Warg <warg@os.inf.tu-dresden.de>
- *               Matthias Lange <matthias.lange@kernkonzept.com>
+ * Copyright (C) 2013-2020 Kernkonzept GmbH.
+ * Author(s): Alexander Warg <alexander.warg@kernkonzept.com>
+ *            Matthias Lange <matthias.lange@kernkonzept.com>
  *
- * This file is part of TUD:OS and distributed under the terms of the
- * GNU General Public License 2.
- * Please see the COPYING-GPL-2 file for details.
- *
- * As a special exception, you may use this file as part of a free software
- * library without restriction.  Specifically, if other files instantiate
- * templates or use macros or inline functions from this file, or you compile
- * this file and link it with other files to produce an executable, this
- * file does not by itself cause the resulting executable to be covered by
- * the GNU General Public License.  This exception does not however
- * invalidate any other reasons why the executable file might be covered by
- * the GNU General Public License.
  */
-
 #pragma once
 
 /**
@@ -93,7 +82,8 @@ enum L4virtio_device_status
   L4VIRTIO_STATUS_DRIVER      = 2,   /**< Guest OS knows how to drive device. */
   L4VIRTIO_STATUS_DRIVER_OK   = 4,   /**< Driver is set up. */
   L4VIRTIO_STATUS_FEATURES_OK = 8,   /**< Driver has acknowledged feature set. */
-  L4VIRTIO_STATUS_FAILED      = 0x80 /**< Fatal error in driver or device. */
+  L4VIRTIO_STATUS_DEVICE_NEEDS_RESET = 0x40, /**< Device detected fatal error. */
+  L4VIRTIO_STATUS_FAILED      = 0x80 /**< Driver detected fatal error. */
 };
 
 /** L4virtio-specific feature bits. */

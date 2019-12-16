@@ -1,22 +1,11 @@
 // vi:ft=cpp
+/* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
 /*
- * (c) 2013-2014 Alexander Warg <warg@os.inf.tu-dresden.de>
- *               Matthias Lange <matthias.lange@kernkonzept.com>
+ * Copyright (C) 2013-2020 Kernkonzept GmbH.
+ * Author(s): Alexander Warg <alexander.warg@kernkonzept.com>
+ *            Matthias Lange <matthias.lange@kernkonzept.com>
  *
- * This file is part of TUD:OS and distributed under the terms of the
- * GNU General Public License 2.
- * Please see the COPYING-GPL-2 file for details.
- *
- * As a special exception, you may use this file as part of a free software
- * library without restriction.  Specifically, if other files instantiate
- * templates or use macros or inline functions from this file, or you compile
- * this file and link it with other files to produce an executable, this
- * file does not by itself cause the resulting executable to be covered by
- * the GNU General Public License.  This exception does not however
- * invalidate any other reasons why the executable file might be covered by
- * the GNU General Public License.
  */
-
 #pragma once
 
 #include "virtio.h"
@@ -70,6 +59,21 @@ public:
     {
       return send_cmd(L4VIRTIO_CMD_CFG_QUEUE | num,
                       out_notify, in_notify, to);
+    }
+
+    /**
+     * Check the VIRTIO status register device and driver failure bits.
+     *
+     * \return true if either FAILED or DEVICE_NEEDS_RESET is set.
+     *
+     * Called by driver-side code to read the shared memory status word and
+     * check the fail state of both the device and driver.
+     */
+    bool fail_state() const
+    {
+      auto cfg_status = cxx::access_once(&status);
+      return cfg_status
+             & (L4VIRTIO_STATUS_FAILED | L4VIRTIO_STATUS_DEVICE_NEEDS_RESET);
     }
 
     int set_status(unsigned new_status, L4::Cap<L4::Triggerable> out_notify,
