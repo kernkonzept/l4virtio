@@ -822,6 +822,9 @@ public:
   virtual void register_single_driver_irq()
   { L4Re::chksys(-L4_ENOSYS, "Legacy single IRQ interface not implemented."); }
 
+  /// callback for triggering configuration change notification IRQ
+  virtual void trigger_driver_config_irq() const = 0;
+
   /// callback to gather the device notification IRQ (old-style)
   virtual L4::Cap<L4::Irq> device_notify_irq() const
   {
