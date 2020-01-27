@@ -61,7 +61,7 @@ private:
   Cfg_region _config;
   l4_addr_t _ds_offset = 0;
 
-  Status _status; // status shadow, can be trusted by the device model
+  Status _status{0}; // status shadow, can be trusted by the device model
 
   static l4_uint32_t align(l4_uint32_t x)
   { return (x + 0xfU) & ~0xfU; }
