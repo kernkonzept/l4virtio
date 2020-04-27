@@ -1270,7 +1270,7 @@ private:
         return;
       }
 
-    // only check feature compatiblity before DRIVER_OK is set
+    // only check feature compatibility before DRIVER_OK is set
     if (status.features_ok() && !status.driver_ok()
           && !check_features_internal())
       status.features_ok() = 0;
