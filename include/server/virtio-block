@@ -497,15 +497,6 @@ public:
   virtual void reset_device() = 0;
 
   /**
-   * The client requests reinitialisation of the connection.
-   *
-   * \return False if reinitialisation is not supported.
-   * \return True if reinitialisation is supported and the client has been
-   *         reinitialised successfully.
-   */
-  virtual bool reset_client() { return false; }
-
-  /**
    * Return true, if the queues should not be processed further.
    */
   virtual bool queue_stopped() = 0;
@@ -589,14 +580,6 @@ private:
 
   void register_single_driver_irq()
   {
-    if (_kick_guest_irq)
-      {
-        // client has changed, purge all old state
-        reset();
-        if (!reset_client())
-          L4Re::chksys(-L4_EINVAL, "Client already connected.");
-      }
-
     _kick_guest_irq = L4Re::Util::Unique_cap<L4::Irq>(
       L4Re::chkcap(this->server_iface()->template rcv_cap<L4::Irq>(0)));
 
