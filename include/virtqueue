@@ -46,6 +46,9 @@ static inline void rmb() { asm volatile ("sync" : : : "memory"); }
 #elif defined(__amd64__) || defined(__i386__) || defined(__i686__)
 static inline void wmb() { asm volatile ("sfence" : : : "memory"); }
 static inline void rmb() { asm volatile ("lfence" : : : "memory"); }
+#elif defined(__riscv)
+static inline void wmb() { asm volatile ("fence ow, ow" : : : "memory"); }
+static inline void rmb() { asm volatile ("fence ir, ir" : : : "memory"); }
 #else
 #warning Missing proper memory write barrier
 static inline void wmb() { asm volatile ("" : : : "memory"); }
