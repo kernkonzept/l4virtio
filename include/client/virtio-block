@@ -381,7 +381,7 @@ public:
    * \param srvcap       IPC capability of the channel to the server.
    * \param usermem      Size of additional memory to share with device.
    * \param userdata     Pointer to the region of user-usable memory.
-   * \param user_devaddr Adress of user-usable memory in device address space.
+   * \param user_devaddr Address of user-usable memory in device address space.
    * \param fmask0       Feature bits 0..31 that the driver supports.
    * \param fmask1       Feature bits 32..63 that the driver supports.
    *

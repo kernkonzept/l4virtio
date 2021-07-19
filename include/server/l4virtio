@@ -457,7 +457,7 @@ private:
   }
 
 public:
-  /// Make default empty memroy region
+  /// Make default empty memory region
   Driver_mem_region_t() : _size(0) {}
 
   /**
@@ -533,13 +533,13 @@ public:
     _trans_offset = _drv_base - _local_base.get();
   }
 
-  /// \return True if the region is writable, false else.
+  /// \return True if the region is writable, false otherwise.
   bool is_writable() const { return _flags.rw(); }
 
   /// \return The flags for this region.
   Flags flags() const { return _flags; }
 
-  /// \return True if the region is empty (size == 0), false else.
+  /// \return True if the region is empty (size == 0), false otherwise.
   bool empty() const
   { return _size == 0; }
 

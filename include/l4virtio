@@ -140,7 +140,7 @@ public:
   /**
    * Register a shared data space with VIRTIO host
    *
-   * \param ds_cap  Data-space capability to register. The lower 8 bits determine
+   * \param ds_cap  Dataspace capability to register. The lower 8 bits determine
    *                the rights mask with which the guest's rights are masked during
    *                the registration of the dataspace at the VIRTIO host.
    * \param base    VIRTIO guest physical start address of shared memory region
