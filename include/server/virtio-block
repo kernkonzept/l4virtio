@@ -528,7 +528,7 @@ public:
     // Request can be dropped here.
   }
 
-  int reconfig_queue(unsigned idx)
+  int reconfig_queue(unsigned idx) override
   {
     if (idx == 0 && this->setup_queue(&_queue, 0, _vq_max))
       return 0;
@@ -536,7 +536,7 @@ public:
     return -L4_EINVAL;
   }
 
-  void reset()
+  void reset() override
   {
     _queue.disable();
     _dev_config.reset_queue(0, _vq_max);
@@ -573,7 +573,7 @@ protected:
   }
 
 private:
-  L4::Cap<L4::Irq> device_notify_irq() const
+  L4::Cap<L4::Irq> device_notify_irq() const override
   {
     return L4::cap_cast<L4::Irq>(_irq_handler.obj_cap());
   }
@@ -591,7 +591,7 @@ private:
     _kick_guest_irq->trigger();
   }
 
-  bool check_queues()
+  bool check_queues() override
   {
     if (!_queue.ready())
       {
