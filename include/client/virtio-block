@@ -390,7 +390,7 @@ public:
    * the block device. It will also allocate and share additional memory
    * that the caller then can use freely, i.e. normally this memory would
    * be used as a reception buffer. The caller may also decide to not make use
-   * of this convenience funcion and request 0 bytes in usermem. Then it has
+   * of this convenience function and request 0 bytes in usermem. Then it has
    * to allocate the block buffers for sending/receiving payload manually and
    * share them using register_ds().
    */
@@ -517,7 +517,7 @@ public:
    * \param addr    Address of data block in device address space.
    * \param size    Size of data block.
    *
-   * \retval L4_OK       Block was sucessfully added.
+   * \retval L4_OK       Block was successfully added.
    * \retval -L4_EAGAIN  No descriptors available. Try again later.
    *
    */
@@ -550,7 +550,7 @@ public:
    *
    * \param handle  Handle to request to send to the device
    *
-   * \retval L4_OK       Request was successfuly scheduled.
+   * \retval L4_OK       Request was successfully scheduled.
    * \retval -L4_EAGAIN  No descriptors available. Try again later.
    *
    * Sends a request to the driver that was previously set up

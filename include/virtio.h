@@ -61,7 +61,7 @@ enum L4virtio_device_ids
   L4VIRTIO_ID_BLOCK         = 2,      /**< General block device. */
   L4VIRTIO_ID_CONSOLE       = 3,      /**< Simple device for data IO via ports. */
   L4VIRTIO_ID_RNG           = 4,      /**< Entropy source. */
-  L4VIRTIO_ID_BALLOON       = 5,      /**< Memory balooning device. */
+  L4VIRTIO_ID_BALLOON       = 5,      /**< Memory ballooning device. */
   L4VIRTIO_ID_RPMSG         = 7,      /**< Device using rpmsg protocol. */
   L4VIRTIO_ID_SCSI          = 8,      /**< SCSI host device. */
   L4VIRTIO_ID_9P            = 9,      /**< Device using 9P transport protocol. */

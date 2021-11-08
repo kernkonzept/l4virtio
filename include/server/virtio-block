@@ -299,7 +299,7 @@ protected:
   /**
    * Sets the maximum size of any single segment reported to client.
    *
-   * The limit is also applied to any incomming requests.
+   * The limit is also applied to any incoming requests.
    * Requests with larger segments result in an IO error being
    * reported to the client. That means that process_request() can
    * safely make the assumption that all segments in the received
@@ -386,7 +386,7 @@ protected:
     set_device_features(df);
   }
 
-  /** Sets cache mode and enables the the writeback toggle.
+  /** Sets cache mode and enables the writeback toggle.
    *
    * \param writeback Mode of the cache (0 for writethrough, 1 for writeback).
    */
