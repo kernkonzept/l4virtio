@@ -88,3 +88,5 @@ typedef struct l4virtio_input_event_t
   l4_uint16_t code;
   l4_uint32_t value;
 } l4virtio_input_event_t;
+
+/**\} */

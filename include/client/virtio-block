@@ -586,7 +586,7 @@ public:
   /**
    * Process request synchronously.
    *
-   * \param req  Request to send to the device
+   * \param handle  Handle to request to process.
    *
    * Sends a request to the driver that was previously set up
    * with start_request() and add_block() and wait for it to be
