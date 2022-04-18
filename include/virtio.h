@@ -74,6 +74,7 @@ enum L4virtio_device_ids
   L4VIRTIO_ID_INPUT         = 18,     /**< Input */
   L4VIRTIO_ID_VSOCK         = 19,     /**< Vsock transport */
   L4VIRTIO_ID_CRYPTO        = 20,     /**< Crypto */
+  L4VIRTIO_ID_FS            = 26,     /**< FS */
 
   L4VIRTIO_ID_SOCK          = 0x9999, /**< Unofficial socket device. */
 };
