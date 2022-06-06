@@ -4,6 +4,7 @@ L4DIR	?= $(PKGDIR)/../..
 EXTRA_TARGET += \
 	l4virtio \
 	virtqueue \
+	client/l4virtio \
 	client/virtio-block \
 	server/virtio \
 	server/l4virtio \
