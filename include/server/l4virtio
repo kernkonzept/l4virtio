@@ -1,13 +1,17 @@
 // vi:ft=cpp
 /* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
 /*
- * Copyright (C) 2014-2020 Kernkonzept GmbH.
+ * Copyright (C) 2014-2020, 2022 Kernkonzept GmbH.
  * Author(s): Alexander Warg <alexander.warg@kernkonzept.com>
+ *            Manuel von Oltersdorff-Kalettka <manuel.kalettka@kernkonzept.com>
  *
  */
 #pragma once
 
+#include <algorithm>
 #include <limits.h>
+#include <memory>
+#include <vector>
 
 #include <l4/re/dataspace>
 #include <l4/re/util/debug>
@@ -791,6 +795,13 @@ protected:
 private:
   Dev_config *_device_config; ///< Device configuration space
 
+  using Ds_vector = std::vector<L4::Cap<L4Re::Dataspace>>;
+  /// vector of trusted dataspaces
+  std::shared_ptr<Ds_vector const> _trusted_ds_caps;
+
+  /// Flag for trusted ds validation.
+  bool _trusted_ds_validation_enabled = false;
+
 public:
   L4_RPC_LEGACY_DISPATCH(L4virtio::Device);
   template<typename IOS> int virtio_dispatch(unsigned r, IOS &ios)
@@ -1177,7 +1188,55 @@ public:
     return true;
   }
 
+  /**
+   * Enable trusted dataspace validation
+   */
+  void enable_trusted_ds_validation()
+  {
+    _trusted_ds_validation_enabled = true;
+  }
+
+  /**
+   * Provide a list of trusted dataspaces that can be used for validation.
+   *
+   * \param ds  list of trusted dataspaces.
+   */
+  void
+  add_trusted_dataspaces(std::shared_ptr<Ds_vector const> ds)
+  {
+    _trusted_ds_caps = ds;
+  }
+
+
 private:
+  /**
+   * Check if a given dataspace is a trusted dataspace for queues and buffers.
+   *
+   * A dataspace is considered a trusted dataspace for queues and buffers, if
+   * it is included in the list of registered trusted dataspaces.
+   *
+   * \param ds  Dataspace capability to validate.
+   *
+   * \retval L4_EOK     Given Dataspace is a trusted one.
+   * \retval L4_EINVAL  Given Dataspace is not a trusted one.
+   */
+  long validate_ds(L4::Cap<L4Re::Dataspace> ds)
+  {
+    if (!_trusted_ds_caps)
+      return -L4_EINVAL;
+    if (std::any_of(_trusted_ds_caps->cbegin(), _trusted_ds_caps->cend(),
+                    [&ds](L4::Cap<L4Re::Dataspace> cap)
+                      {
+                        return L4Re::Env::env()->task()
+                          ->cap_equal(ds, cap).label() == 1;
+                      }
+    ))
+      {
+        return L4_EOK;
+      }
+    return -L4_EINVAL;
+  }
+
   void _check_n_init_shm(L4::Ipc::Snd_fpage shm_cap_fp,
                          l4_uint64_t base, l4_umword_t size, l4_addr_t offset)
   {
@@ -1187,6 +1246,9 @@ private:
     L4Re::Util::Unique_cap<L4Re::Dataspace> ds(
         L4Re::chkcap(server_iface()->template rcv_cap<L4Re::Dataspace>(0)));
     L4Re::chksys(server_iface()->realloc_rcv_cap(0));
+
+    if (_trusted_ds_validation_enabled)
+      L4Re::chksys(validate_ds(ds.get()), "Validating the dataspace.");
 
     check_n_init_shm(cxx::move(ds), base, size, offset);
   }
