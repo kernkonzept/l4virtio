@@ -6,6 +6,7 @@ EXTRA_TARGET += \
 	virtqueue \
 	client/l4virtio \
 	client/virtio-block \
+	client/virtio-net \
 	server/virtio \
 	server/l4virtio \
 	server/virtio-block
