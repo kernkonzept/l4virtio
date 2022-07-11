@@ -133,6 +133,19 @@ public:
   bool fail_state() const { return _config->fail_state(); }
 
   /**
+   * Check if a particular feature bit was negotiated with the device.
+   * The result is only valid after driver_acknowledge() was called
+   * (when the handshake with the device was completed).
+   *
+   * \param feat  The feature bit.
+   *
+   * \retval true   The feature is supported by both driver and device.
+   * \retval false  The feature is not supported by the driver and/or device.
+   */
+  bool feature_negotiated(unsigned int feat) const
+  { return l4virtio_get_feature(_config->driver_features_map, feat); }
+
+  /**
    * Finalize handshake with the device.
    *
    * Must be called after all queues have been set up and before the first
