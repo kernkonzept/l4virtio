@@ -66,7 +66,7 @@ public:
   };
 
   /**
-   * Setup a connection to a device and set up shared memory.
+   * Establish a connection to the device and set up shared memory.
    *
    * \param srvcap       IPC capability of the channel to the server.
    * \param usermem      Size of additional memory to share with device.
@@ -79,7 +79,7 @@ public:
    * \param fmask0       Feature bits 0..31 that the driver supports.
    * \param fmask1       Feature bits 32..63 that the driver supports.
    *
-   * This function starts a hand shake with the device and sets up the
+   * This function starts a handshake with the device and sets up the
    * virtqueues for communication and the additional data structures for
    * the block device. It will also allocate and share additional memory
    * that the caller then can use freely, i.e. normally this memory would
