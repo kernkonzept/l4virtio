@@ -312,15 +312,6 @@ l4virtio_register_ds(l4_cap_idx_t cap, l4_cap_idx_t ds_cap,
 /**
  * \param cap     Capability to the L4-VIRTIO host
  *
- * \copydoc L4virtio::Device::register_iface
- */
-L4_CV int
-l4virtio_register_iface(l4_cap_idx_t cap, l4_cap_idx_t guest_irq,
-                        l4_cap_idx_t host_irq, l4_cap_idx_t config_ds) L4_NOTHROW;
-
-/**
- * \param cap     Capability to the L4-VIRTIO host
- *
  * \copydoc L4virtio::Device::device_config
  */
 L4_CV int

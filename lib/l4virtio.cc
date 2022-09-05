@@ -30,17 +30,6 @@ l4virtio_register_ds(l4_cap_idx_t cap, l4_cap_idx_t ds_cap,
 }
 
 L4_CV int
-l4virtio_register_iface(l4_cap_idx_t cap, l4_cap_idx_t guest_irq,
-                        l4_cap_idx_t host_irq, l4_cap_idx_t config_ds) L4_NOTHROW
-{
-  L4::Ipc::Cap<L4::Irq> girq;
-  girq = L4::Ipc::make_cap(L4::Cap<L4::Irq>(guest_irq), L4_CAP_FPAGE_RW);
-  return L4::Cap<L4virtio::Device>(cap)
-    ->register_iface(girq, L4::Cap<L4::Irq>(host_irq),
-                     L4::Cap<L4Re::Dataspace>(config_ds));
-}
-
-L4_CV int
 l4virtio_device_config_ds(l4_cap_idx_t cap, l4_cap_idx_t config_ds,
                           l4_addr_t *ds_offset) L4_NOTHROW
 {

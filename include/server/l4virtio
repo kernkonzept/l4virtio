@@ -768,20 +768,8 @@ typedef Driver_mem_list_t<No_custom_data> Driver_mem_list;
 /**
  * Server-side L4-VIRTIO device stub.
  *
- * This stub supports old-style device registration with single IRQs
- * (via register_iface()) and new-style multi-event registration
- * (using get_device_config(), bind() and get_device_notification_irq()).
- *
- * In their default implementation the callbacks provide a wrapper
- * from old-style to new-style functions, so that legacy devices
- * provide both interfaces without any changes to their implementation.
- *
- * New devices should always implement the new-style interface. If required,
- * they can also provide a backward-compatibility mode by implementing
- * the old-style interface as well.
- *
- * The old-style interface is considered deprecated and will be
- * removed at some point.
+ * This stub supports new-style multi-event registration (using
+ * get_device_config(), bind() and get_device_notification_irq()).
  */
 template<typename DATA>
 class Device_t
@@ -903,30 +891,6 @@ public:
 
     _check_n_init_shm(ds_cap_fp, ds_base, sz, offset);
 
-    return 0;
-  }
-
-  long op_register_iface(L4virtio::Device::Rights,
-                         L4::Ipc::Snd_fpage irq_cap_fp,
-                         L4::Ipc::Cap<L4::Triggerable> &host_irq,
-                         L4::Ipc::Cap<L4Re::Dataspace> &config_ds)
-  {
-    // If a dataspace with offset is used, the old-style registration
-    // interface cannot be supported.
-    if (_device_config->ds_offset() != 0)
-      return -L4_ENOSYS;
-
-    if (!irq_cap_fp.cap_received())
-      return -L4_EINVAL;
-
-    register_single_driver_irq();
-
-    L4Re::Util::Dbg()
-      .printf("register client: host IRQ: %lx config DS: %lx\n",
-              device_notify_irq().cap(), _device_config->ds().cap());
-
-    host_irq = L4::Ipc::make_cap(device_notify_irq(), L4_CAP_FPAGE_RO);
-    config_ds = L4::Ipc::make_cap(_device_config->ds(), L4_CAP_FPAGE_RW);
     return 0;
   }
 

@@ -155,27 +155,6 @@ public:
                                     l4_umword_t size));
 
   /**
-   * Register client to the L4-VIRTIO device.
-   *
-   * \param guest_irq  IRQ capability for valid IRQ object for device-to-driver
-   *                   notifications.
-   * \param host_irq   Capability selector for receiving the driver-to-device
-   *                   notifications IRQ capability.
-   * \param config_ds  Capability for receiving the dataspace capability for
-   *                   the shared L4-VIRTIO config data space.
-   *
-   * \retval  L4_EOK     Success.
-   * \retval -L4_ENOSYS  This interface is no longer supported by the server.
-   *                     Use get_device_config() etc. instead.
-   *
-   * \deprecated Use device_config(), device_notification_irq() and
-   *             Icu::bind() instead.
-   */
-  L4_INLINE_RPC(long, register_iface, (L4::Ipc::Cap<L4::Triggerable> guest_irq,
-                                       L4::Ipc::Out<L4::Cap<L4::Triggerable> > host_irq,
-                                       L4::Ipc::Out<L4::Cap<L4Re::Dataspace> > config_ds));
-
-  /**
    * Get the dataspace with the L4virtio configuration page.
    *
    * \param config_ds  Capability for receiving the dataspace capability for
@@ -208,9 +187,9 @@ public:
                 (unsigned index, L4::Ipc::Out<L4::Cap<L4::Triggerable> > irq));
 
 
-  typedef L4::Typeid::Rpcs<set_status_t, config_queue_t, register_iface_t,
-                           register_ds_t, device_config_t,
-                           device_notification_irq_t> Rpcs;
+  typedef L4::Typeid::Rpcs<set_status_t, config_queue_t, register_ds_t,
+                           device_config_t, device_notification_irq_t>
+    Rpcs;
 };
 
 }
