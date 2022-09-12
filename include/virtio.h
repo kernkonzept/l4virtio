@@ -45,15 +45,6 @@ enum L4virtio_vendor
   L4VIRTIO_VENDOR_KK = 0x44
 };
 
-/** L4-VIRTIO opcodes */
-enum L4_virtio_opcodes
-{
-  L4VIRTIO_OP_SET_STATUS  = 0,  /**< Set status register in device config */
-  L4VIRTIO_OP_CONFIG_QUEUE,     /**< Set queue config in device config */
-  L4VIRTIO_OP_REGISTER_IFACE,   /**< Register a transport driver to the device */
-  L4VIRTIO_OP_REGISTER_DS,      /**< Register a data space as transport memory */
-};
-
 /** Virtio device IDs as reported in the driver's config space. */
 enum L4virtio_device_ids
 {
