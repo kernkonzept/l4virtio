@@ -276,6 +276,7 @@ public:
   /**
    * Wait for the next item to arrive in the used queue and return it.
    *
+   * \param queue     A queue.
    * \param[out] len  (optional) Size of valid data in finished block.
    *                  Note that this is the value reported by the device,
    *                  which may set it to a value that is larger than the
