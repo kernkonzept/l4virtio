@@ -1,0 +1,694 @@
+// vi:ft=cpp
+/* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
+/*
+ * Copyright (C) 2019-2023 Kernkonzept GmbH.
+ * Author(s): Sarah Hoffmann <sarah.hoffmann@kernkonzept.com>
+ *            Phillip Raffeck <phillip.raffeck@kernkonzept.com>
+ *            Steffen Liebergeld <steffen.liebergeld@kernkonzept.com>
+ *            Jan Klötzke <jan.kloetzke@kernkonzept.com>
+ */
+#pragma once
+
+#include <l4/l4virtio/server/l4virtio>
+#include <l4/re/error_helper>
+
+namespace L4virtio { namespace Svr { namespace Console {
+
+/// Virtio console specific feature bits.
+struct Features : Dev_config::Features
+{
+  Features() = default;
+  explicit Features(l4_uint32_t raw) : Dev_config::Features(raw) {}
+  /// Configuration `cols` and `rows` are valid.
+  CXX_BITFIELD_MEMBER(0, 0, console_size, raw);
+  /// Device has support for multiple ports.
+  CXX_BITFIELD_MEMBER(1, 1, console_multiport, raw);
+  /// Device has support for emergency write.
+  CXX_BITFIELD_MEMBER(2, 2, emerg_write, raw);
+};
+
+/// Virtio console control message.
+struct Control_message
+{
+  /// Possible control events.
+  enum Events
+  {
+    /// Sent by driver at initialization.
+    Device_ready  = 0,
+    /// Sent by device to create new ports.
+    Device_add    = 1,
+    /// Sent by device to remove added ports.
+    Device_remove = 2,
+    /// Sent by driver as response to `Device_add`.
+    Port_ready    = 3,
+    /// Sent by device to nominate port as console port.
+    Console_port  = 4,
+    /// Sent by device to indicate a console size change.
+    Resize        = 5,
+    /// Sent by device and driver to indicate whether a port is open.
+    Port_open     = 6,
+    /// Sent by device to tag a port.
+    Port_name     = 7,
+  };
+
+  l4_uint32_t id; ///< Port number.
+  l4_uint16_t event; ///< Control event, see `Events`.
+  l4_uint16_t value; ///< Extra information.
+
+  Control_message() {}
+  Control_message(l4_uint32_t i, l4_uint16_t e, l4_uint16_t v)
+  : id(i), event(e), value(v)
+  {}
+};
+
+/// Specialised `Virtqueue::Request` providing access to control message payload.
+struct Control_request
+{
+  /// Virtual address of the data block (in device space).
+  Control_message *msg;
+  /// Length of datablock in bytes.
+  l4_uint32_t len;
+  /// Pointer to driver memory region.
+  Driver_mem_region *mem;
+};
+
+/**
+ * Representation of a Virtio console port.
+ *
+ * Each port consists of a pair of queues for sending and receiving.
+ *
+ * A port may be added and removed at runtime when the multi-port feature
+ * is enabled. The states are as follows:
+ *
+ * ```
+ *    +----------+      port_remove()
+ *    | DISABLED |<----------------------- [all]
+ *    +----------+
+ *         |
+ *         | port_add()
+ *         v
+ *    +----------+   process_port_ready(0)
+ *    |  ADDED   + --------------+
+ *    +----------+               |             +--------+
+ *         |                     +------------>|        |
+ *         | process_port_ready(1)             |        |
+ *         v                                   | FAILED |
+ *    +----------+   process_port_ready(0)     |        |
+ *    |  READY   |---------------------------->|        |
+ *    +----------+<----------+                 +--------+
+ *         |                 |                      ^
+ *         | port_open(true) | port_open(false)     |
+ *         v                 |                      | process_port_ready(0)
+ *    +----------+           |                      |
+ *    |   OPEN   |-----------+                      |
+ *    +----------+----------------------------------+
+ * ```
+ */
+struct Port
+{
+  /**
+   * Possible states of a virtio console port.
+   */
+  enum Port_status
+  {
+    /// Reset state, waiting for port to be added.
+    Port_disabled = 0,
+    /// Port has been added by device, waiting for ready message.
+    Port_added,
+    /// Port is ready but still closed.
+    Port_ready,
+    /// Port is in a working state.
+    Port_open,
+    /// Device failure, port unusable.
+    Port_failed
+  };
+
+  /// Size of control queues, also used as default size.
+  enum { Control_queue_size = 0x10 };
+
+  Virtqueue tx; ///< Receiveq of the port.
+  Virtqueue rx; ///< Transmitq of the port.
+  Port_status status; ///< State the port is in.
+  unsigned vq_max; ///< Maximum queue sizes for this port.
+
+  Port() : status(Port_disabled), vq_max(Control_queue_size) {}
+  Port(Port const &) = delete;
+  Port &operator = (Port const &) = delete;
+
+  virtual ~Port() = default;
+
+  /// Check that the port is open.
+  bool is_open() const
+  { return status == Port_open; }
+
+  /// Reset the port to the initial state and disable its virtqueues.
+  virtual void reset()
+  {
+    status = Port_disabled;
+  }
+
+  /// Check that both virtqueues are set up correctly.
+  bool queues_ready() const
+  { return tx.ready() && rx.ready(); }
+
+  /// Check that device implementation may write to receive queues.
+  bool rx_ready() const
+  { return is_open() && rx.ready(); }
+
+  /// Check that device implementation may read from transmit queues.
+  bool tx_ready() const
+  { return is_open() && tx.ready(); }
+};
+
+/**
+ * Base class implementing a virtio console functionality.
+ *
+ * It is possible to activate the MULTIPORT feature, in which case incoming
+ * control messages need to be dispatched by calling
+ * `handle_control_message()`. The derived class must additionally override
+ * `process_device_ready()`, `process_port_ready()` and `process_port_open()`
+ * to implement the actual behaviour. The derived class has the following
+ * responsibilities:
+ *   - inform the driver about usable ports once the device is ready as
+ *     signaled in process_device_ready(), see the wrapper `port_add()`.
+ *   - inform the driver about unusable ports, see the wrapper `port_remove()`.
+ *   - react to open/close events, see the wrapper `port_open()`.
+ *
+ * This implementation provides no means to handle interrupts or notify guests,
+ * therefore derived classes have to provide this functionality, see
+ * `notify_queue()` and `handle_control_message()`. Similarly, all interaction
+ * with data queues has to be implemented. Memory for port structures must be
+ * managed by the implementor as well.
+ *
+ * Use this class as a base to implement your own specific console device.
+ */
+class Virtio_con : public L4virtio::Svr::Device
+{
+  enum Virtqueue_names
+  {
+    Ctrl_rx = 2, ///< Communication queue from device to driver.
+    Ctrl_tx = 3, ///< Communication queue from driver to device.
+  };
+
+  struct Serial_config_space
+  {
+    l4_uint16_t cols;
+    l4_uint16_t rows;
+    l4_uint32_t max_nr_ports;
+    l4_uint32_t emerg_wr;
+  } __attribute__((packed));
+
+public:
+  /**
+   * Create a new multiport console device.
+   *
+   * \param max_ports         Maximum number of ports the device should be
+   *                          able to handle (ignored when `enable_multiport`
+   *                          is false).
+   * \param enable_multiport  Enable the control queue for dynamic handling
+   *                          of ports.
+   */
+  explicit Virtio_con(unsigned max_ports, bool enable_multiport)
+  : L4virtio::Svr::Device(&_dev_config),
+    _num_ports(enable_multiport ? max_ports : 1),
+    _dev_config(L4VIRTIO_VENDOR_KK, L4VIRTIO_ID_CONSOLE,
+                enable_multiport ? max_ports * 2 + 2 : 2)
+  {
+    if (_num_ports < 1)
+      L4Re::chksys(-L4_EINVAL, "At least one port is required.");
+
+    Features hf(0);
+
+    hf.console_multiport() = enable_multiport;
+
+    _dev_config.host_features(0) = hf.raw;
+
+    if (enable_multiport)
+      _dev_config.priv_config()->max_nr_ports = _num_ports;
+    _dev_config.reset_hdr();
+  }
+
+  void reset_queue_configs()
+  {
+    for (unsigned q = 0; q < _dev_config.num_queues(); ++q)
+      reset_queue_config(q, max_queue_size(q));
+  }
+
+  int reconfig_queue(unsigned index) override
+  {
+    if (index >= _dev_config.num_queues())
+      return -L4_ERANGE;
+
+    if (setup_queue(get_queue(index), index, max_queue_size(index)))
+      return 0;
+
+    return -L4_EINVAL;
+  }
+
+  /**
+   * Return true if the multiport feature is enabled and control queues are
+   * available.
+   */
+  bool multiport_enabled() const
+  {
+    return _negotiated_features.console_multiport()
+              && _dev_config.num_queues() > Ctrl_rx;
+  }
+
+  bool ctrl_queue_ready() const
+  { return _ctrl_port.is_open(); }
+
+  bool check_features(void) override
+  {
+    _negotiated_features = Features(_dev_config.negotiated_features(0));
+    return true;
+  }
+
+  bool check_queues() override
+  {
+    // NOTE
+    // The VIRTIO specification states:
+    // "The port 0 receive and transmit queues always exist"
+    // The linux driver however does not setup port 0 if the multiport feature
+    // is negotiated.
+    // We just go along with the linux driver and do not expect port 0 to be up,
+    // if the multiport feature is negotiated.
+
+    if (multiport_enabled())
+      // If MULTIPORT was negotiated, ctrl queues should be set up.
+      return _ctrl_port.queues_ready();
+
+    // If MULTIPORT was not negotiated, port 0 should be set up.
+    port(0)->status = Port::Port_open;
+    return port(0)->queues_ready();
+  }
+
+  /**
+   * Send a DEVICE_ADD message and update the internal state.
+   *
+   * \param idx  Port that should be added.
+   *
+   * \retval L4_EOK     Message has been sent.
+   * \retval -L4_EPERM  Control message is not allowed in the current state.
+   * \return Errors from send_control_message()
+   *
+   * \pre `port` must be smaller than the configured number of ports.
+   * \pre Port must not already exist.
+   */
+  int port_add(unsigned idx)
+  {
+    Port *p = port(idx);
+
+    if (p->status != Port::Port_disabled)
+      return -L4_EPERM;
+
+    int ret = send_control_message(idx, Control_message::Device_add);
+
+    if (ret == L4_EOK)
+      p->status = Port::Port_added;
+
+    return ret;
+  }
+
+  /**
+   * Send a DEVICE_REMOVE message and update the internal state.
+   *
+   * \param idx  Port that should be removed.
+   *
+   * \retval L4_EOK      Message has been sent.
+   * \retval -L4_EPERM   Control message is not allowed in the current state.
+   * \return Errors from send_control_message()
+   *
+   * \pre `port` must be smaller than the configured number of ports.
+   * \pre Port must already exist.
+   */
+  int port_remove(unsigned idx)
+  {
+    Port *p = port(idx);
+
+    if (p->status != Port::Port_open
+        && p->status != Port::Port_ready
+        && p->status != Port::Port_failed)
+      return -L4_EPERM;
+
+    int ret = send_control_message(idx, Control_message::Device_remove);
+
+    if (ret == L4_EOK)
+      p->reset();
+
+    return ret;
+  }
+
+  /**
+   * Send a PORT_OPEN message and update the internal state.
+   *
+   * \param idx   Port that should be opened or closed.
+   * \param open  Open or close port.
+   *
+   * \retval L4_EOK      Message has been sent.
+   * \retval -L4_EPERM   Control message is not allowed in the current state.
+   * \return Errors from send_control_message()
+   *
+   * \pre `port` must be smaller than the configured number of ports.
+   * \pre Port must already exist.
+   */
+  int port_open(unsigned idx, bool open)
+  {
+    Port *p = port(idx);
+
+    if ((open && p->status != Port::Port_ready)
+        || (!open && p->status != Port::Port_open))
+      return -L4_EPERM;
+
+    int ret = send_control_message(idx, Control_message::Port_open, open);
+
+    if (ret == L4_EOK)
+      p->status = open ? Port::Port_open : Port::Port_ready;
+
+    return ret;
+  }
+
+  /**
+   * Send control message to driver.
+   *
+   * \param idx    Port number.
+   * \param event  Kind of control event.
+   * \param value  Extra information for the event.
+   * \param name   Name to be used for Port_name message
+   *
+   * \retval L4_EOK      Message has been sent.
+   * \retval -L4_ENODEV  Control queue is not ready.
+   * \retval -L4_EBUSY   Currently no descriptor available in the control queue.
+   * \retval -L4_ENOMEM  Client-issued descriptor too small. Device will be set
+   *                     to failed state.
+   *
+   * \pre `port` must be smaller than the configured number of ports.
+   *
+   * The convenience functions `port_add()`, `port_remove()` and `port_open()`
+   * should cover the most use cases and are the preferred way of communication
+   * with the driver. If you use this function directly, it is your
+   * responsibility to guarantee no invalid control messages are sent to the
+   * driver.
+   */
+  int send_control_message(l4_uint32_t idx, l4_uint16_t event,
+                           l4_uint16_t value = 0, const char *name = 0)
+  {
+    if (!ctrl_queue_ready())
+      return  -L4_ENODEV;
+
+    Virtqueue *q = &_ctrl_port.rx;
+    if (!q->ready())
+      return -L4_ENODEV;
+
+    Virtqueue::Request r = q->next_avail();
+    if (!r)
+      return -L4_EBUSY;
+
+    Request_processor rp;
+    Control_request req;
+    rp.start(this, r, &req);
+
+    if (req.len < sizeof(Control_message))
+      return -L4_ENOMEM;
+
+    Control_message msg(idx, event, value);
+
+    memcpy(req.msg, &msg, sizeof(msg));
+
+    if (event == Control_message::Port_name && name)
+      {
+        size_t name_len = cxx::min(req.len - sizeof(msg), strlen(name));
+        memcpy(reinterpret_cast<char*>(req.msg) + sizeof(msg), name, name_len);
+        q->finish(r, this, sizeof(msg) + name_len);
+      }
+    else
+      q->finish(r, this, sizeof(msg));
+
+    return L4_EOK;
+  }
+
+  /**
+   * Handle control message received from the driver.
+   *
+   * \retval L4_EOK      Message has been handled.
+   * \retval -L4_ENODEV  Control queue is not ready.
+   * \retval -L4_EBUSY   Currently no descriptor available in the control queue.
+   * \retval -L4_EINVAL  Received an unexpected control event.
+   *
+   * This function performs the basic handling of control messages from the
+   * driver. It does all necessary work with the control queues and performs
+   * some sanity checks. All other work is deferred to the derived class, see
+   * `process_device_ready()`, `process_port_ready()` and `process_port_open()`.
+   */
+  int handle_control_message()
+  {
+    Virtqueue *q = &_ctrl_port.tx;
+    if (!q->ready())
+      return -L4_ENODEV;
+
+    Virtqueue::Request r;
+    while ((r = q->next_avail()))
+      {
+        Request_processor rp;
+        Control_request req;
+
+        rp.start(this, r, &req);
+
+        Control_message msg;
+        if (req.len < sizeof(msg))
+          {
+            // Just ignore malformed input.
+            q->consumed(r);
+            return L4_EOK;
+          }
+
+        memcpy(&msg, req.msg, sizeof(msg));
+        q->consumed(r);
+
+        if (_ctrl_port.status == Port::Port_disabled)
+          {
+            // When the control queue is disabled, only device ready is accepted.
+            if (msg.event == Control_message::Device_ready)
+              {
+                if (msg.value)
+                  _ctrl_port.status = Port::Port_open;
+              }
+
+            process_device_ready(msg.value);
+            continue;
+          }
+
+        if (!ctrl_queue_ready())
+          continue;
+
+        switch (msg.event)
+          {
+          case Control_message::Port_ready:
+            // Ignore invalid port ids
+            if (msg.id >= max_ports())
+              break;
+
+            // Ignore repeated PORT_READY messages.
+            if ((port(msg.id)->status == Port::Port_disabled)
+                || (!msg.value && port(msg.id)->status == Port::Port_added))
+              break;
+
+            process_port_ready(msg.id, msg.value);
+            break;
+
+          case Control_message::Port_open:
+            // Ignore invalid port ids
+            if (msg.id >= max_ports())
+              break;
+
+            // Ignore misplaced PORT_OPEN messages.
+            if ((msg.value && port(msg.id)->status != Port::Port_ready)
+                || (!msg.value && port(msg.id)->status != Port::Port_open))
+              break;
+
+            process_port_open(msg.id, msg.value);
+            break;
+          default:
+            return -L4_EINVAL;
+          }
+      }
+
+    return L4_EOK;
+  }
+
+  /// \internal
+  void load_desc(L4virtio::Virtqueue::Desc const &desc,
+                 Request_processor const *proc,
+                 L4virtio::Virtqueue::Desc const **table)
+  {
+    this->_mem_info.load_desc(desc, proc, table);
+  }
+
+  /// \internal
+  void load_desc(L4virtio::Virtqueue::Desc const &desc,
+                 Request_processor const *proc,
+                 Control_request *data)
+  {
+    auto *region = this->_mem_info.find(desc.addr.get(), desc.len);
+    if (L4_UNLIKELY(!region))
+      throw Bad_descriptor(proc, Bad_descriptor::Bad_address);
+
+    data->msg = reinterpret_cast<Control_message *>(region->local(desc.addr));
+    data->len = desc.len;
+    data->mem = region;
+  }
+
+  void reset() override
+  {
+    for (unsigned p = 0; p < _num_ports; ++p)
+      port(p)->reset();
+
+    _ctrl_port.reset();
+    reset_queue_configs();
+    _dev_config.reset_hdr();
+    _negotiated_features = Features(0);
+
+    reset_device();
+  }
+
+  /**
+   * Reset the state of the actual console device.
+   *
+   * This callback is called at the end of `reset()`, allowing the derived class
+   * to reset internal state.
+   */
+  virtual void reset_device() {}
+
+  /**
+   * Notify queue of available data.
+   *
+   * \param queue  Virtqueue to notify.
+   *
+   * This callback is called whenever data is sent to `queue`. It is the
+   * responsibility of the derived class to perform all necessary notification
+   * actions, e.g. triggering guest interrupts.
+   */
+  virtual void notify_queue(Virtqueue *queue) = 0;
+
+  /**
+   * Return the specified port.
+   *
+   * \param port Port number.
+   *
+   * \pre Port number must be lower than the configured maximum number of ports.
+   */
+  virtual Port *port(unsigned port) = 0;
+  virtual Port const *port(unsigned port) const = 0;
+
+  /**
+   * Callback called on DEVICE_READY event.
+   *
+   * \param value  The value field of the control message, indicating if the
+   *               initialization was successful.
+   *
+   * Needs to be overridden by the derived class if the MULTIPORT feature is
+   * enabled. Control messages may be sent only after the driver has
+   * successfully initialized the device.
+   */
+  virtual void process_device_ready(l4_uint16_t value) = 0;
+
+  /**
+   * Callback called on PORT_READY event.
+   *
+   * \param id     The id field of the control message, i.e. the port number.
+   * \param value  The value field of the control message, indicating if the
+   *               initialization was successful.
+   *
+   * May be overridden by the derived class if the MULTIPORT feature is
+   * enabled. This default implementation just sets the status of the port
+   * according to the driver message.
+   */
+  virtual void process_port_ready(l4_uint32_t id, l4_uint16_t value)
+  {
+    Port *p = port(id);
+
+    switch (p->status)
+      {
+      case Port::Port_added:
+      case Port::Port_ready:
+        p->status = value ? Port::Port_ready : Port::Port_failed;
+        break;
+      case Port::Port_open:
+        if (!value)
+          p->status = Port::Port_failed;
+        break;
+      default:
+        // invalid state for PORT_READY message
+        break;
+      }
+  }
+
+  /**
+   * Callback called on PORT_OPEN event.
+   *
+   * \param id     The id field of the control message, i.e. the port number.
+   * \param value  The value field of the control message, indicating if the
+   *               port was opened or closed.
+   *
+   * Needs to be overridden by the derived class if the MULTIPORT feature is
+   * enabled. The device must acknowledge the message by calling `port_open()`.
+   */
+  virtual void process_port_open(l4_uint32_t id, l4_uint16_t value) = 0;
+
+  unsigned max_ports() const
+  { return _num_ports; }
+
+private:
+  bool is_control_queue(unsigned q) const
+  { return q == Ctrl_rx || q == Ctrl_tx; }
+
+  unsigned queue_to_port(unsigned q) const
+  { return (q == 0 || q == 1) ? 0 : (q / 2) - 1; }
+
+  /**
+   * Returns the maximum queue size for the given index.
+   *
+   * \param q  Index of queue to query.
+   *
+   * This function must only be called in contexts, where q is known to be
+   * within range.
+   */
+  unsigned max_queue_size(unsigned q) const
+  {
+    if (is_control_queue(q))
+      return _ctrl_port.vq_max;
+
+    return port(queue_to_port(q))->vq_max;
+  }
+
+  /**
+   * Returns the virtqueue associated with the given index.
+   *
+   * \param q  Number of queue to return.
+   *
+   * This function must only be called in contexts, where q is known to be
+   * within range.
+   */
+  Virtqueue *get_queue(unsigned q)
+  {
+    Port *p;
+    if (is_control_queue(q))
+      p = &_ctrl_port;
+    else
+      p = port(queue_to_port(q));
+
+    if (q & 1)
+      return &p->tx;
+    else
+      return &p->rx;
+  }
+
+  unsigned _num_ports;
+
+protected:
+  Dev_config_t<Serial_config_space> _dev_config;
+  Port _ctrl_port;
+  Features _negotiated_features{0};
+};
+
+}}} // name space

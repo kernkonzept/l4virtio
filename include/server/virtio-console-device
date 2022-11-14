@@ -1,0 +1,532 @@
+// vi:ft=cpp
+/* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
+/*
+ * Copyright (C) 2019-2023 Kernkonzept GmbH.
+ * Author(s): Sarah Hoffmann <sarah.hoffmann@kernkonzept.com>
+ *            Phillip Raffeck <phillip.raffeck@kernkonzept.com>
+ *            Steffen Liebergeld <steffen.liebergeld@kernkonzept.com>
+ *            Jan Klötzke <jan.kloetzke@kernkonzept.com>
+ */
+#pragma once
+
+#include <l4/cxx/bitmap>
+#include <l4/cxx/static_vector>
+#include <l4/l4virtio/server/l4virtio>
+#include <l4/l4virtio/server/virtio-console>
+#include <l4/re/error_helper>
+
+namespace L4virtio { namespace Svr { namespace Console {
+
+/**
+ * A console port with associated read/write state.
+ *
+ * Tracks the notification of the device implementation and holds the state
+ * when receiving data from the driver.
+ */
+struct Device_port : public Port
+{
+  struct Buffer : Data_buffer
+  {
+    Buffer() = default;
+    Buffer(Driver_mem_region const *r,
+           Virtqueue::Desc const &d,
+           Request_processor const *)
+    {
+      pos = static_cast<char *>(r->local(d.addr));
+      left = d.len;
+    }
+  };
+
+  Request_processor rp; ///< Request processor associated with current request.
+  Virtqueue::Request request; ///< Current virtio tx queue request.
+  Buffer src; ///< Source data block to process.
+
+  bool poll_in_req = true;
+  bool poll_out_req = false;
+
+  void reset() override
+  {
+    Port::reset();
+    request = Virtqueue::Request();
+  }
+};
+
+/**
+ * Base class implementing a virtio console device with L4Re-based notification
+ * handling.
+ *
+ * This console device is derived from Virtio_con and already includes
+ * functionality to handle interrupts and notify drivers. If an interrupt is
+ * received, all the necessary interaction with the virtqueues is performed and
+ * only the actual data processing has to be done by the derived class. By
+ * default all available ports are added and an "open"-request of a port by the
+ * driver is automatically acknowledged. The derived class can optionally
+ * change this behaviour by overriding `process_device_ready()`,
+ * `process_port_ready()` and `process_port_open()`.
+ *
+ * This class provides a stream-based interface to access the port data with
+ * edge-triggered notification callbacks. If a port receives data from the
+ * driver the derived class is notified with the `rx_data_available()`
+ * callback. The actual data can be retrieved by `port_read()`. If there was
+ * not enough data to be read, the call will return the available partial data.
+ * Only then will the `rx_data_available()` callback be triggered again.
+ *
+ * Data on a port may be transmitted by `port_write()`. If there were not
+ * enough buffers available, only a part of the data will be transmitted. Once
+ * there are new buffers available, the `tx_space_available()` callback will be
+ * invoked. This callback will be called again only after a previous
+ * `port_write()` was not able to send all requested data.
+ *
+ * Use this class as a base to provide your own high-level console device. You
+ * must derive from this class as well as L4::Epiface_t<..., L4virtio::Device>.
+ * For a working device the irq_iface() must be registered too. A typical
+ * implementation might look like the following:
+ *
+ * \code
+ * class My_console
+ * : public L4virtio::Svr::Console::Device,
+ *   public L4::Epiface_t<My_console, L4virtio::Device>
+ * {
+ * public:
+ *   My_console(L4Re::Util::Object_registry *r)
+ *   : L4virtio::Svr::Console::Device(0x100)
+ *   {
+ *     init_mem_info(4);
+ *     L4Re::chkcap(r->register_irq_obj(irq_iface()), "virtio notification IRQ");
+ *   }
+ *
+ *   void rx_data_available(unsigned port) override
+ *   {
+ *     // call port_read() to fetch available data
+ *   }
+ *
+ *   void tx_space_available(unsigned port) override
+ *   {
+ *     // can call port_write() to send (pending) data
+ *   }
+ * };
+ *
+ * My_console console(registry);
+ * registry->register_obj(&console, ...);
+ * \endcode
+ *
+ * The maximum number of memory regions (init_mem_info()) should correlate
+ * with the number of supported ports.
+ */
+class Device
+: public Virtio_con
+{
+  class Irq_object : public L4::Irqep_t<Irq_object>
+  {
+  public:
+    Irq_object(Device *parent) : _parent(parent) {}
+
+    void handle_irq() { _parent->kick(); }
+
+  private:
+    Device *_parent;
+  };
+
+protected:
+  L4::Epiface *irq_iface()
+  { return &_irq_handler; }
+
+public:
+  /**
+   * Create a new console device.
+   *
+   * \param vq_max  Maximum number of buffers in data queues.
+   *
+   * Create a console device with no multiport support, i.e. control queues are
+   * disabled.
+   */
+  explicit Device(unsigned vq_max)
+  : Virtio_con(1, false),
+    _irq_handler(this),
+    _ports(cxx::make_unique<Device_port[]>(1)),
+    _control_message_stalled(0)
+  {
+    _ports[0].vq_max = vq_max;
+    reset_queue_configs();
+  }
+
+  /**
+   * Create a new console device.
+   *
+   * \param vq_max  Maximum number of buffers in data queues.
+   * \param ports   Number of ports (maximum 32).
+   *
+   * Create a console device with multiport support, i.e. control queues are
+   * enabled.
+   */
+  explicit Device(unsigned vq_max, unsigned ports)
+  : Virtio_con(ports, true),
+    _irq_handler(this),
+    _ports(cxx::make_unique<Device_port[]>(ports)),
+    _control_message_stalled(0)
+  {
+    if (ports > sizeof(_control_message_stalled) * 8)
+      L4Re::chksys(-L4_ENOMEM, "Only 32 ports are supported.");
+    for (unsigned i = 0; i < ports; ++i)
+      _ports[i].vq_max = vq_max;
+    reset_queue_configs();
+  }
+
+  /**
+   * Create a new console Device.
+   *
+   * \param vq_max_nums  Maximum number of buffers in data queues, given as a
+   *                     cxx::static_vector with one entry per port.
+   *
+   * Create a console device with multiport support, i.e. control queues are
+   * enabled.
+   */
+  explicit Device(cxx::static_vector<unsigned> const &vq_max_nums)
+  : Virtio_con(vq_max_nums.size(), true),
+    _irq_handler(this),
+    _ports(cxx::make_unique<Device_port[]>(max_ports())),
+    _control_message_stalled(0)
+  {
+    if (max_ports() > sizeof(_control_message_stalled)*8)
+      L4Re::chksys(-L4_ENOMEM, "Only 32 ports are supported.");
+
+    for (unsigned i = 0; i < vq_max_nums.size(); ++i)
+      _ports[i].vq_max = vq_max_nums[i];
+    reset_queue_configs();
+  }
+
+  void register_single_driver_irq() override
+  {
+    _kick_driver_irq = L4Re::Util::Unique_cap<L4::Irq>(
+      L4Re::chkcap(server_iface()->rcv_cap<L4::Irq>(0)));
+    L4Re::chksys(server_iface()->realloc_rcv_cap(0));
+  }
+
+  L4::Cap<L4::Irq> device_notify_irq() const override
+  { return _irq_handler.obj_cap(); }
+
+  void notify_queue(Virtqueue *queue) override
+  {
+    if (queue->no_notify_guest())
+      return;
+
+    // we do not care about this anywhere, so skip
+    // _device_config->irq_status |= 1;
+
+    _kick_driver_irq->trigger();
+  }
+
+  /**
+   * Callback to notify that new data is available to be read from \a port.
+   */
+  virtual void rx_data_available(unsigned port) = 0;
+
+  /**
+   * Callback to notify that data can be written to \a port.
+   */
+  virtual void tx_space_available(unsigned port) = 0;
+
+  /**
+   * Return true, if the queues should not be processed further.
+   */
+  virtual bool queues_stopped()
+  { return false; }
+
+  void trigger_driver_config_irq() const override
+  {
+    _kick_driver_irq->trigger();
+  }
+
+  void kick()
+  {
+    if (queues_stopped())
+      return;
+
+    // We're not interested in logging any errors, just ignore return value.
+    do_control_work();
+
+    for (unsigned i = 0; i < max_ports(); ++i)
+      {
+        auto &p = _ports[i];
+        if (p.poll_in_req && p.tx_ready() && p.tx.desc_avail())
+          {
+            p.poll_in_req = false;
+            rx_data_available(i);
+          }
+
+        if (p.poll_out_req && p.rx_ready() && p.rx.desc_avail())
+          {
+            p.poll_out_req = false;
+            tx_space_available(i);
+          }
+      }
+  }
+
+  /**
+   * Read data from port.
+   *
+   * Will read up to \a len bytes from \a port into \a buf. Returns the number
+   * of bytes read, which may be less if not enough data was available. If all
+   * data was read, the rx_data_available() callback will be invoked the next
+   * time the driver queues new data for the port. The callback won't be called
+   * again until all data was consumed again.
+   *
+   * \param buf The destination buffer
+   * \param len Size of the buffer
+   * \param port Port index to read data from
+   * \return Number of bytes read
+   */
+  unsigned port_read(char *buf, unsigned len, unsigned port = 0)
+  {
+    unsigned total = 0;
+    Device_port &p = _ports[port];
+    Virtqueue *q = &p.tx;
+
+    Data_buffer dst;
+    dst.pos = buf;
+    dst.left = len;
+
+    while (dst.left)
+      {
+        try
+          {
+            // Make sure we have a valid request where we can read data from
+            if (!p.request.valid())
+              {
+                p.request = p.tx_ready() ? q->next_avail()
+                                         : Virtqueue::Request();
+                if (!p.request.valid())
+                  break;
+
+                p.rp.start(mem_info(), p.request, &p.src);
+              }
+
+            total += p.src.copy_to(&dst);
+
+            // We might have eaten up the current descriptor. Move to the next
+            // if this is the case. At the end of the descriptor chain we have
+            // to retire the current request altogether.
+            if (!p.src.left)
+              {
+                if (!p.rp.next(mem_info(), &p.src))
+                  {
+                    q->finish(p.request, this);
+                    p.request = Virtqueue::Request();
+                  }
+              }
+          }
+        catch (Bad_descriptor const &)
+          {
+            q->finish(p.request, this);
+            p.request = Virtqueue::Request();
+          }
+      }
+
+    if (total < len)
+      p.poll_in_req = true;
+
+    return total;
+  }
+
+  /**
+   * Write data to port.
+   *
+   * Will write up to \a len bytes to \a port from \a buf. Returns the number
+   * of bytes written, which may be less if not enough virtio buffers were
+   * available. If not all data could be written, the tx_space_available()
+   * callback will be invoked the next time the driver queues new receive
+   * buffers for the port. The callback won't be called again until all receive
+   * buffers were filled again.
+   *
+   * \param buf The souce buffer
+   * \param len Size of the buffer
+   * \param port Port index to write data to
+   * \return Number of bytes written
+   */
+  unsigned port_write(char const *buf, unsigned len, unsigned port = 0)
+  {
+    unsigned total = 0;
+    Device_port &p = _ports[port];
+    Virtqueue *q = &p.rx;
+
+    Data_buffer src;
+    src.pos = const_cast<char*>(buf);
+    src.left = len;
+
+    Request_processor rp;
+    while (src.left)
+      {
+        auto r = p.rx_ready() ? q->next_avail() : Virtqueue::Request();
+        if (!r.valid())
+          break;
+
+        l4_uint32_t chunk = 0;
+        try
+          {
+            Device_port::Buffer dst;
+            rp.start(mem_info(), r, &dst);
+
+            for (;;)
+              {
+                chunk += src.copy_to(&dst);
+                if (!src.left)
+                  break;
+                if (!rp.next(mem_info(), &dst))
+                  break;
+              }
+          }
+        catch (Bad_descriptor const &)
+          { /* Ignore */ }
+
+        q->finish(r, this, chunk);
+        total += chunk;
+      }
+
+    if (total < len)
+      p.poll_out_req = true;
+
+    return total;
+  }
+
+   /**
+    * Receive new control messages and resend stalled ones.
+    *
+    * \retval see `handle_control_message()`
+    *
+    * As it may happen that the driver is not able to receive a control
+    * message, there may be some stalled control message. This function checks
+    * if such messages exist and tries to resend them once more. Afterwards it
+    * checks for new messages from the driver, see `handle_control_message()`.
+    */
+  int do_control_work()
+  {
+    if (_control_message_stalled)
+      resend_stalled_control_messages();
+
+    return handle_control_message();
+  }
+
+  bool ctrl_work_pending() const
+  {
+    return (L4_LIKELY(_ctrl_port.queues_ready())
+           && _ctrl_port.tx.desc_avail()) || _control_message_stalled;
+  }
+
+  /**
+   * Callback called on DEVICE_READY event.
+   *
+   * \param value  The value field of the control message, indicating if the
+   *               initialization was successful.
+   *
+   * By default, this function adds all ports if the driver indicates
+   * successful initialization. Override this function to perform custom
+   * actions for a DEVICE_READY event, _after_ the generic management of the
+   * base class. It is then your responsibility to inform the driver about
+   * usable ports, see `port_add()`.
+   */
+  void process_device_ready(l4_uint16_t value) override
+  {
+    if (!value)
+      return;
+
+    for (unsigned i = 0; i < max_ports(); ++i)
+      check_stalled(i, port_add(i));
+  }
+
+  /**
+   * Callback called on PORT_READY event.
+   *
+   * \param id     The id field of the control message, i.e. the port number.
+   * \param value  The value field of the control message, indicating if the
+   *               initialization was successful.
+   *
+   * By default, this function removes the port, if the driver failed to set it
+   * up correctly. Override this function to perform custom actions for a
+   * PORT_READY event, _after_ the generic management of the base class. It is
+   * then your responsibility to inform the driver about unusable ports, see
+   * `port_remove()`.
+   */
+  void process_port_ready(l4_uint32_t id, l4_uint16_t value) override
+  {
+    Virtio_con::process_port_ready(id, value);
+
+    Port *p = port(id);
+    if (p->status == Port::Port_failed)
+      check_stalled(id, port_remove(id));
+  }
+
+  /**
+   * Callback called on PORT_OPEN event.
+   *
+   * \param id     The id field of the control message, i.e. the port number.
+   * \param value  The value field of the control message, indicating if the
+   *               port was opened or closed.
+   *
+   * By default, this function acknowledges the message from the driver by
+   * sending back the same message. Override this function to perform custom
+   * actions for a PORT_OPEN event, _after_ the generic management of the base
+   * class. It is then your responsibility to update the internal port state and
+   * answer the driver's messages, see `port_open()`.
+   */
+  void process_port_open(l4_uint32_t id, l4_uint16_t value) override
+  { check_stalled(id, port_open(id, value)); }
+
+protected:
+  /**
+   * Try to resend a stalled control message and update the port and global
+   * state accordingly.
+   */
+  void resend_stalled_control_messages()
+  {
+    for (unsigned i = 0; i < max_ports(); ++i)
+      {
+        if (!(_control_message_stalled & (1U << i)))
+          continue;
+
+        switch(_ports[i].status)
+          {
+          case Port::Port_disabled:
+            check_stalled(i, port_add(i));
+            break;
+          case Port::Port_failed:
+            check_stalled(i, port_remove(i));
+            break;
+          case Port::Port_ready:
+            check_stalled(i, port_open(i, 1));
+            break;
+          case Port::Port_open:
+            check_stalled(i, port_open(i, 0));
+            break;
+          default:
+            break;
+          }
+      }
+  }
+
+  Port* port(unsigned idx) override
+  {
+    return &_ports[idx];
+  }
+
+  Port const *port(unsigned idx) const override
+  {
+    return &_ports[idx];
+  }
+
+  void check_stalled(unsigned port, int retval)
+  {
+    if (retval == -L4_ENODEV  || retval == -L4_EBUSY)
+          _control_message_stalled |= 1U << port;
+        else
+          _control_message_stalled &= ~1U << port;
+  }
+
+private:
+  Irq_object _irq_handler;
+  cxx::unique_ptr<Device_port[]> _ports;
+  L4Re::Util::Unique_cap<L4::Irq> _kick_driver_irq;
+  /// Bitmap of ports that require a control message to be sent.
+  l4_uint32_t _control_message_stalled;
+};
+
+}}} // name space

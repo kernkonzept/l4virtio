@@ -179,6 +179,12 @@ public:
   { return _host_features[idx]; }
 
   /**
+   * Return the number of queues currently usable.
+   */
+  l4_uint32_t num_queues() const
+  { return _nqueues; }
+
+  /**
    * Return a specific set of guest features.
    *
    * \param idx  Index into the guest features array.
