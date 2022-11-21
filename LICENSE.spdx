@@ -8,7 +8,7 @@ SPDXVersion: SPDX-2.1
 DataLicense: CC0-1.0
 SPDXID: SPDXRef-Document
 DocumentNamespace: spdx:kernkonzept/l4virtio-5d371ff6-e7f6-11e8-9cb6-0b7cd4e22c8b
-DocumentName: LICENSE.spdx
+DocumentName: l4virtio
 
 Creator: Organization: Kernkonzept GmbH (info@kernkonzept.com)
 
