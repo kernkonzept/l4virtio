@@ -45,6 +45,18 @@ enum L4virtio_vendor
   L4VIRTIO_VENDOR_KK = 0x44
 };
 
+/**
+ * Opcodes to setup and configure a device
+ */
+enum L4_virtio_opcodes
+{
+  L4VIRTIO_OP_SET_STATUS     = 0, /**< Write device status register. */
+  L4VIRTIO_OP_CONFIG_QUEUE   = 1, /**< Configure queue. */
+  L4VIRTIO_OP_REGISTER_DS    = 3, /**< Register shared memory with device */
+  L4VIRTIO_OP_DEVICE_CONFIG  = 4, /**< Get device config page. */
+  L4VIRTIO_OP_GET_DEVICE_IRQ = 5, /**< Retrieve device notification IRQ. */
+};
+
 /** Virtio device IDs as reported in the driver's config space. */
 enum L4virtio_device_ids
 {

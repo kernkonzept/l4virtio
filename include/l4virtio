@@ -118,7 +118,8 @@ public:
    *
    * \note All other registers are accessed via shared memory.
    */
-  L4_INLINE_RPC(long, set_status, (unsigned status));
+  L4_INLINE_RPC_OP(L4VIRTIO_OP_SET_STATUS, long,
+                   set_status, (unsigned status));
 
   /**
    * Trigger queue configuration of the given queue.
@@ -135,7 +136,8 @@ public:
    * \retval -L4_ERANGE The queue index exceeds the number of queues.
    * \retval -L4_EINVAL Otherwise.
    */
-  L4_INLINE_RPC(long, config_queue, (unsigned queue));
+  L4_INLINE_RPC_OP(L4VIRTIO_OP_CONFIG_QUEUE, long,
+                   config_queue, (unsigned queue));
 
   /**
    * Register a shared data space with VIRTIO host
@@ -150,9 +152,10 @@ public:
    *
    * \return 0 on success, < 0 on error
    */
-  L4_INLINE_RPC(long, register_ds, (L4::Ipc::Cap<L4Re::Dataspace> ds_cap,
-                                    l4_uint64_t base, l4_umword_t offset,
-                                    l4_umword_t size));
+  L4_INLINE_RPC_OP(L4VIRTIO_OP_REGISTER_DS, long,
+                   register_ds, (L4::Ipc::Cap<L4Re::Dataspace> ds_cap,
+                                 l4_uint64_t base, l4_umword_t offset,
+                                 l4_umword_t size));
 
   /**
    * Get the dataspace with the L4virtio configuration page.
@@ -162,8 +165,9 @@ public:
    * \param ds_offset  Offset into the dataspace where the device configuration
    *                   structure starts.
    */
-  L4_INLINE_RPC(long, device_config, (L4::Ipc::Out<L4::Cap<L4Re::Dataspace> > config_ds,
-                                      l4_addr_t *ds_offset));
+  L4_INLINE_RPC_OP(L4VIRTIO_OP_DEVICE_CONFIG, long, device_config,
+                   (L4::Ipc::Out<L4::Cap<L4Re::Dataspace> > config_ds,
+                    l4_addr_t *ds_offset));
 
   /**
    * Get the notification interrupt corresponding to the given index.
@@ -183,8 +187,8 @@ public:
    *
    * Interrupts must always be rerequested after a device reset.
    */
-  L4_INLINE_RPC(long, device_notification_irq,
-                (unsigned index, L4::Ipc::Out<L4::Cap<L4::Triggerable> > irq));
+  L4_INLINE_RPC_OP(L4VIRTIO_OP_GET_DEVICE_IRQ, long, device_notification_irq,
+                   (unsigned index, L4::Ipc::Out<L4::Cap<L4::Triggerable> > irq));
 
 
   typedef L4::Typeid::Rpcs<set_status_t, config_queue_t, register_ds_t,
