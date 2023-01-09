@@ -356,7 +356,8 @@ struct Bad_descriptor
    */
   char const *message() const
   {
-    char const *const err[] = {
+    static char const *const err[] =
+    {
       [Bad_address] = "Descriptor address cannot be translated",
       [Bad_rights]  = "Insufficient memory access rights",
       [Bad_flags]   = "Invalid descriptor flags",
@@ -364,7 +365,7 @@ struct Bad_descriptor
       [Bad_size]    = "Invalid size of the memory block"
     };
 
-    if (error >= (sizeof(err) / sizeof(err[0])))
+    if (error >= (sizeof(err) / sizeof(err[0])) || !err[error])
       return "Unknown error";
 
    return err[error];
