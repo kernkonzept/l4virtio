@@ -150,7 +150,17 @@ public:
    *                given `base` in the guest physical memory.
    * \param size    Size of the memory region in the guest
    *
-   * \return 0 on success, < 0 on error
+   * \retval L4_EOK      Operation successful.
+   * \retval -L4_EINVAL  The `ds_cap` capability is invalid, does not refer to
+   *                     a valid dataspace, is not a trusted dataspace if
+   *                     trusted dataspace validation is enabled, or `size` and
+   *                     `offset` specify an invalid region.
+   * \retval -L4_ENOMEM  The limit of dataspaces that can be registered has been
+   *                     reached or no capability slot could be allocated.
+   * \retval -L4_ERANGE  `offset` is lager than the size of the dataspace.
+   * \retval <0          Any error returned by the dataspace when queried for
+   *                     information during setup or any error returned by the
+   *                     region manager from attaching the dataspace.
    */
   L4_INLINE_RPC_OP(L4VIRTIO_OP_REGISTER_DS, long,
                    register_ds, (L4::Ipc::Cap<L4Re::Dataspace> ds_cap,
