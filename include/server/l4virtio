@@ -814,6 +814,9 @@ public:
   /// callback for client queue-config request
   virtual int reconfig_queue(unsigned idx) = 0;
 
+  /// callback for client device configuration changes
+  virtual void cfg_changed(unsigned /* reg */) {};
+
   /// callback for registering a single guest IRQ for all queues (old-style)
   virtual void register_single_driver_irq()
   { L4Re::chksys(-L4_ENOSYS, "Legacy single IRQ interface not implemented."); }
@@ -1146,6 +1149,10 @@ public:
 
       case L4VIRTIO_CMD_CFG_QUEUE:
         reconfig_queue(cmd & ~L4VIRTIO_CMD_MASK);
+        break;
+
+      case L4VIRTIO_CMD_CFG_CHANGED:
+        cfg_changed(cmd & ~L4VIRTIO_CMD_MASK);
         break;
 
       default:

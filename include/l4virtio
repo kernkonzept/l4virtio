@@ -84,6 +84,14 @@ public:
                       out_notify, in_notify, to);
     }
 
+    int cfg_changed(unsigned reg, L4::Cap<L4::Triggerable> out_notify,
+                   L4::Cap<L4::Triggerable> in_notify,
+                   l4_timeout_s to = L4_IPC_TIMEOUT_NEVER)
+    {
+      return send_cmd(L4VIRTIO_CMD_CFG_CHANGED | reg,
+                      out_notify, in_notify, to);
+    }
+
     int send_cmd(unsigned command, L4::Cap<L4::Triggerable> out_notify,
                  L4::Cap<L4::Triggerable> in_notify,
                  l4_timeout_s to = L4_IPC_TIMEOUT_NEVER)
