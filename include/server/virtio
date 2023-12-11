@@ -368,7 +368,7 @@ struct Bad_descriptor
     if (error >= (sizeof(err) / sizeof(err[0])) || !err[error])
       return "Unknown error";
 
-   return err[error];
+    return err[error];
   }
 };
 
