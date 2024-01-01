@@ -95,7 +95,7 @@ enum L4virtio_feature_bits
   /// Virtio protocol version 1 supported. Must be 1 for L4virtio.
   L4VIRTIO_FEATURE_VERSION_1  = 32,
   /// Status and queue config are set via cmd field instead of via IPC.
-  L4VIRTIO_FEATURE_CMD_CONFIG = 224
+  L4VIRTIO_FEATURE_CMD_CONFIG = 160
 };
 
 /**
@@ -124,23 +124,26 @@ enum L4_virtio_cmd
  */
 typedef struct l4virtio_config_hdr_t
 {
+  /* Virtio(0x00): device config */
   l4_uint32_t magic;          /**< magic value (must be 'virt'). */
   l4_uint32_t version;        /**< VIRTIO version */
   l4_uint32_t device;         /**< device ID */
   l4_uint32_t vendor;         /**< vendor ID */
 
+  /* Virtio(0x10): device features */
   l4_uint32_t dev_features;   /**< device features windows selected by device_feature_sel */
   l4_uint32_t dev_features_sel;
   l4_uint32_t _res1[2];
 
+  /* Virtio(0x20): driver features */
   l4_uint32_t driver_features;
   l4_uint32_t driver_features_sel;
 
-  /* some L4virtio specific members ... */
+  /* L4Virtio(0x28): L4 queue */
   l4_uint32_t num_queues;     /**< number of virtqueues */
   l4_uint32_t queues_offset;  /**< offset of virtqueue config array */
 
-  /* must start at 0x30 (per virtio-mmio layout) */
+  /* Virtio(0x30): queue status */
   l4_uint32_t queue_sel;
   l4_uint32_t queue_num_max;
   l4_uint32_t queue_num;
@@ -148,41 +151,48 @@ typedef struct l4virtio_config_hdr_t
   l4_uint32_t queue_ready;
   l4_uint32_t _res4[2];
 
+  /* Virtio(0x50): queue notify */
   l4_uint32_t queue_notify;
   l4_uint32_t _res5[3];
 
+  /* Virtio(0x60): interrupt handling */
   l4_uint32_t irq_status;
   l4_uint32_t irq_ack;
   l4_uint32_t _res6[2];
 
-  /**
-   * Device status register (read-only). The register must be written
-   * using l4virtio_set_status().
-   *
-   * must be at offset 0x70 (virtio-mmio)
-   */
+  /* Virtio(0x70): Device status register (read-only). The register must be
+   * written using l4virtio_set_status(). */
   l4_uint32_t status;
-  l4_uint32_t _res7[3];
 
+  /* L4Virtio(0x74): W: Event index to be used for config notifications (device to driver) */
+  l4_uint32_t cfg_driver_notify_index;
+  /* L4Virtio(0x78): R: Event index to be used for config notifications (driver to device) */
+  l4_uint32_t cfg_device_notify_index;
+
+  /* L4Virtio(0x7c) L4 specific command register polled by the driver iff supported */
+  l4_uint32_t cmd;
+
+  /* Virtio(0x80): queue descriptors */
   l4_uint64_t queue_desc;
   l4_uint32_t _res8[2];
   l4_uint64_t queue_avail;
   l4_uint32_t _res9[2];
   l4_uint64_t queue_used;
 
-  /* use the unused space here for device and driver feature bitmaps */
-  l4_uint32_t dev_features_map[8];
-  l4_uint32_t driver_features_map[8];
+  l4_uint32_t _res10[1];
 
-  l4_uint32_t _res10[2];
+  /* Virtio(0xac): shared memory region */
+  l4_uint32_t shm_sel;
+  l4_uint64_t shm_len;
+  l4_uint64_t shm_base;
 
-  /** W: Event index to be used for config notifications (device to driver) */
-  l4_uint32_t cfg_driver_notify_index;
-  /** R: Event index to be used for config notifications (driver to device) */
-  l4_uint32_t cfg_device_notify_index;
+  /* L4Virtio(0xc0): use the unused space here for device and driver feature bitmaps */
+  l4_uint32_t dev_features_map[6];
+  l4_uint32_t _res11[2];
+  l4_uint32_t driver_features_map[6];
+  l4_uint32_t _res12[1];
 
-  /** L4 specific command register polled by the driver iff supported */
-  l4_uint32_t cmd;
+  /* Virtio(0xfc): config generation */
   l4_uint32_t generation;
 } l4virtio_config_hdr_t;
 
