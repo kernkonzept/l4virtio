@@ -257,6 +257,17 @@ public:
   }
 
   /**
+   * \brief Adds irq status bit.
+   * \param status  The value to add to the irq status register.
+   *
+   * This function adds the status bit to the irq status register.
+   */
+  void add_irq_status(l4_uint32_t status)
+  {
+    const_cast<l4_uint32_t volatile &>(hdr()->irq_status) |= status;
+  }
+
+  /**
    * Set DEVICE_NEEDS_RESET bit in device status register.
    *
    * This function sets the internal status register and also the status
@@ -825,7 +836,7 @@ public:
   { L4Re::chksys(-L4_ENOSYS, "Legacy single IRQ interface not implemented."); }
 
   /// callback for triggering configuration change notification IRQ
-  virtual void trigger_driver_config_irq() const = 0;
+  virtual void trigger_driver_config_irq() = 0;
 
   /// callback to gather the device notification IRQ (old-style)
   virtual L4::Cap<L4::Irq> device_notify_irq() const
@@ -1011,11 +1022,7 @@ public:
 
     // the device MUST NOT notify the driver before DRIVER_OK.
     if (_device_config->status().driver_ok())
-      {
-        // we do not care about this anywhere, so skip
-        // _dev_config->irq_status |= 1;
         trigger_driver_config_irq();
-      }
   }
 
   /**

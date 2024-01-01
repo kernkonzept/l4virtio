@@ -485,8 +485,7 @@ public:
     if (req->release_request(&_queue, status, sz) < 0)
       this->device_error();
 
-    // XXX not implemented
-    // _dev_config->irq_status |= 1;
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_VRING);
     _kick_guest_irq->trigger();
 
     // Request can be dropped here.
@@ -560,8 +559,9 @@ private:
     L4Re::chksys(this->server_iface()->realloc_rcv_cap(0));
   }
 
-  void trigger_driver_config_irq() const override
+  void trigger_driver_config_irq() override
   {
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_CONFIG);
     _kick_guest_irq->trigger();
   }
 
