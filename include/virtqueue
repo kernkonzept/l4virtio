@@ -133,7 +133,8 @@ public:
     {
       L4Re::Util::Dbg().printf("D[%04x]: %08llx (%x) f=%04x n=%04x\n",
                                idx, addr.get(),
-                               len, (unsigned)flags.raw, (unsigned)next);
+                               len, static_cast<unsigned>(flags.raw),
+                               static_cast<unsigned>(next));
     }
   };
 
@@ -329,7 +330,7 @@ public:
    */
   unsigned long total_size() const
   {
-    return ((char *) _used - (char *) _desc)
+    return (reinterpret_cast<char *>(_used) - reinterpret_cast<char *>(_desc))
             + used_size(num());
   }
 
@@ -337,13 +338,13 @@ public:
    * Get the offset of the available ring from the descriptor table.
    */
   unsigned long avail_offset() const
-  { return (char const *)_avail - (char const *)_desc; }
+  { return reinterpret_cast<char *>(_avail) - reinterpret_cast<char *>(_desc); }
 
   /**
    * Get the offset of the used ring from the descriptor table.
    */
   unsigned long used_offset() const
-  { return (char const *)_used - (char const *)_desc; }
+  { return reinterpret_cast<char *>(_used) - reinterpret_cast<char *>(_desc); }
 
   /**
    * Enable this queue.
@@ -368,9 +369,9 @@ public:
       throw L4::Runtime_error(-L4_EINVAL, "Queue too large.");
 
     _idx_mask = num - 1;
-    _desc = (Desc*)desc;
-    _avail = (Avail*)avail;
-    _used = (Used*)used;
+    _desc = static_cast<Desc*>(desc);
+    _avail = static_cast<Avail*>(avail);
+    _used = static_cast<Used*>(used);
 
     _current_avail = 0;
 
@@ -395,8 +396,9 @@ public:
   {
     l4_addr_t desc = reinterpret_cast<l4_addr_t>(ring);
     l4_addr_t avail = l4_round_size(desc + desc_size(num), Avail_align);
-    l4_addr_t used = l4_round_size(avail + avail_size(num), Used_align);
-    setup(num, (void *)desc, (void *)avail, (void *)used);
+    void *used = reinterpret_cast<void *>(
+      l4_round_size(avail + avail_size(num), Used_align));
+    setup(num, ring, reinterpret_cast<void *>(avail), used);
   }
 
   /**

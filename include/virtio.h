@@ -234,7 +234,12 @@ EXTERN_C_BEGIN
 L4_INLINE l4virtio_config_queue_t *
 l4virtio_config_queues(l4virtio_config_hdr_t const *cfg)
 {
+#ifdef __cplusplus
+  return reinterpret_cast<l4virtio_config_queue_t *>(
+    reinterpret_cast<l4_addr_t>(cfg) + cfg->queues_offset);
+#else
   return (l4virtio_config_queue_t *)(((l4_addr_t)cfg) + cfg->queues_offset);
+#endif
 }
 
 /**
@@ -245,7 +250,11 @@ l4virtio_config_queues(l4virtio_config_hdr_t const *cfg)
 L4_INLINE void *
 l4virtio_device_config(l4virtio_config_hdr_t const *cfg)
 {
+#ifdef __cplusplus
+  return reinterpret_cast<void *>(reinterpret_cast<l4_addr_t>(cfg) + 0x100);
+#else
   return (void *)(((l4_addr_t)cfg) + 0x100);
+#endif
 }
 
 /**

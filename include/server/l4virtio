@@ -463,7 +463,7 @@ private:
   template<typename T>
   T _local(l4_uint64_t addr) const
   {
-    return (T)(addr - _trans_offset);
+    return reinterpret_cast<T>(addr - _trans_offset);
   }
 
 public:
@@ -557,7 +557,7 @@ public:
   l4_uint64_t drv_base() const { return _drv_base; }
 
   /// \return The local base address.
-  void *local_base() const { return (void*)_local_base.get(); }
+  l4_addr_t local_base() const { return _local_base.get(); }
 
   /// \return The size of the region in bytes.
   l4_umword_t size() const { return _size; }
@@ -1079,8 +1079,8 @@ public:
     L4Re::Util::Dbg()
       .printf("shm=[%llx-%llx] local=[%lx-%lx] desc=[%llx-%llx] (%p-%p)\n",
               desc_info->drv_base(), desc_info->drv_base() + desc_info->size() - 1,
-              (unsigned long)desc_info->local_base(),
-              (unsigned long)desc_info->local_base() + desc_info->size() - 1,
+              desc_info->local_base(),
+              desc_info->local_base() + desc_info->size() - 1,
               desc, desc + Virtqueue::desc_size(num),
               desc_info->local(Ptr<char>(desc)),
               desc_info->local(Ptr<char>(desc)) + Virtqueue::desc_size(num));
@@ -1088,8 +1088,8 @@ public:
     L4Re::Util::Dbg()
       .printf("shm=[%llx-%llx] local=[%lx-%lx] avail=[%llx-%llx] (%p-%p)\n",
               avail_info->drv_base(), avail_info->drv_base() + avail_info->size() - 1,
-              (unsigned long)avail_info->local_base(),
-              (unsigned long)avail_info->local_base() + avail_info->size() - 1,
+              avail_info->local_base(),
+              avail_info->local_base() + avail_info->size() - 1,
               avail, avail + Virtqueue::avail_size(num),
               avail_info->local(Ptr<char>(avail)),
               avail_info->local(Ptr<char>(avail)) + Virtqueue::avail_size(num));
@@ -1097,8 +1097,8 @@ public:
     L4Re::Util::Dbg()
       .printf("shm=[%llx-%llx] local=[%lx-%lx] used=[%llx-%llx] (%p-%p)\n",
               used_info->drv_base(), used_info->drv_base() + used_info->size() - 1,
-              (unsigned long)used_info->local_base(),
-              (unsigned long)used_info->local_base() + used_info->size() - 1,
+              used_info->local_base(),
+              used_info->local_base() + used_info->size() - 1,
               used, used + Virtqueue::used_size(num),
               used_info->local(Ptr<char>(used)),
               used_info->local(Ptr<char>(used)) + Virtqueue::used_size(num));
@@ -1119,8 +1119,8 @@ public:
     L4Re::Util::Dbg()
       .printf("PORT[%p]: DMA guest [%llx-%llx]  local [%lx-%lx]  offset %lx\n",
               this, i->drv_base(), i->drv_base() + i->size() - 1,
-              (unsigned long)i->local_base(),
-              (unsigned long)i->local_base() + i->size() - 1,
+              i->local_base(),
+              i->local_base() + i->size() - 1,
               i->ds_offset());
   }
 
@@ -1362,4 +1362,3 @@ typedef Device_t<No_custom_data> Device;
 } // namespace Svr
 
 }
-
