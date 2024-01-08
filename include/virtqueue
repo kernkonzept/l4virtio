@@ -225,7 +225,10 @@ protected:
   /**
    * Create a disabled virtqueue.
    */
-  Virtqueue() : _desc(0), _idx_mask(0) {}
+  Virtqueue()
+  : _desc(0), _avail(0), _used(0), _current_avail(0), _idx_mask(0)
+  {}
+
   Virtqueue(Virtqueue const &) = delete;
 
 public:
