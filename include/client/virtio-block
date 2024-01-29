@@ -68,16 +68,17 @@ public:
   /**
    * Establish a connection to the device and set up shared memory.
    *
-   * \param srvcap       IPC capability of the channel to the server.
-   * \param usermem      Size of additional memory to share with device.
-   * \param userdata     Pointer to the region of user-usable memory.
-   * \param user_devaddr Address of user-usable memory in device address space.
-   * \param qds          External queue dataspace. If this capability is invalid,
-   *                     the function will attempt to allocate a dataspace
-   *                     on its own. Note that the external queue dataspace
-   *                     must be large enough.
-   * \param fmask0       Feature bits 0..31 that the driver supports.
-   * \param fmask1       Feature bits 32..63 that the driver supports.
+   * \param srvcap             IPC capability of the channel to the server.
+   * \param usermem            Size of additional memory to share with device.
+   * \param[out] userdata      Pointer to the region of user-usable memory.
+   * \param[out] user_devaddr  Address of user-usable memory in device address
+   *                           space.
+   * \param qds                External queue dataspace. If this capability is
+   *                           invalid, the function will attempt to allocate a
+   *                           dataspace on its own. Note that the external
+   *                           queue dataspace must be large enough.
+   * \param fmask0             Feature bits 0..31 that the driver supports.
+   * \param fmask1             Feature bits 32..63 that the driver supports.
    *
    * This function starts a handshake with the device and sets up the
    * virtqueues for communication and the additional data structures for
