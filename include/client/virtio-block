@@ -292,6 +292,12 @@ public:
    *
    * \param handle  Handle to request to process.
    *
+   * \retval L4_EOK      Request processed successfully.
+   * \retval -L4_EAGAIN  No descriptors available. Try again later.
+   * \retval -L4_EIO     IO error during request processing.
+   * \retval -L4_ENOSYS  Unsupported request.
+   * \retval <0          Another unspecified error occurred.
+   *
    * Sends a request to the driver that was previously set up
    * with start_request() and add_block() and wait for it to be
    * executed.
@@ -301,7 +307,7 @@ public:
     // add the status bit
     auto descno = _queue.alloc_descriptor();
     if (descno == Virtqueue::Eoq)
-      return descno;
+      return -L4_EAGAIN;
 
     L4virtio::Virtqueue::Desc &desc = _queue.desc(descno);
     L4virtio::Virtqueue::Desc &prev = _queue.desc(_pending[handle.head].tail);
