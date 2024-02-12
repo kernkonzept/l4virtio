@@ -117,8 +117,8 @@ public:
 
   struct Request : Head_desc
   {
-    Virtqueue *ring;
-    Request() : ring(nullptr) {};
+    Virtqueue *ring = nullptr;
+    Request() = default;
   private:
     friend class Virtqueue;
     Request(Virtqueue *r, unsigned i) : Head_desc(r, i), ring(r) {}

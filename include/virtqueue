@@ -210,25 +210,23 @@ public:
   };
 
 protected:
-  Desc *_desc;   ///< pointer to descriptor table, NULL if queue is off.
-  Avail *_avail; ///< pointer to available ring.
-  Used *_used;         ///< pointer to used ring.
+  Desc *_desc = nullptr; ///< pointer to descriptor table, NULL if queue is off.
+  Avail *_avail = nullptr; ///< pointer to available ring.
+  Used *_used = nullptr;   ///< pointer to used ring.
 
   /** The life counter for the queue */
-  l4_uint16_t _current_avail;
+  l4_uint16_t _current_avail = 0;
 
   /**
    * mask used for indexing into the descriptor table
    * and the rings.
    */
-  l4_uint16_t _idx_mask;
+  l4_uint16_t _idx_mask = 0;
 
   /**
    * Create a disabled virtqueue.
    */
-  Virtqueue()
-  : _desc(0), _avail(0), _used(0), _current_avail(0), _idx_mask(0)
-  {}
+  Virtqueue() = default;
 
   Virtqueue(Virtqueue const &) = delete;
 
