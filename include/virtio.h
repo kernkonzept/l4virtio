@@ -113,11 +113,12 @@ enum L4_virtio_irq_status
  */
 enum L4_virtio_cmd
 {
-  L4VIRTIO_CMD_NONE        = 0x00000000, ///< No command pending
-  L4VIRTIO_CMD_SET_STATUS  = 0x01000000, ///< Set the status register
-  L4VIRTIO_CMD_CFG_QUEUE   = 0x02000000, ///< Configure a queue
-  L4VIRTIO_CMD_CFG_CHANGED = 0x04000000, ///< Device config changed
-  L4VIRTIO_CMD_MASK        = 0xff000000, ///< Mask to get command bits
+  L4VIRTIO_CMD_NONE         = 0x00000000, ///< No command pending
+  L4VIRTIO_CMD_SET_STATUS   = 0x01000000, ///< Set the status register
+  L4VIRTIO_CMD_CFG_QUEUE    = 0x02000000, ///< Configure a queue
+  L4VIRTIO_CMD_CFG_CHANGED  = 0x04000000, ///< Device config changed
+  L4VIRTIO_CMD_NOTIFY_QUEUE = 0x08000000, ///< Configure a queue
+  L4VIRTIO_CMD_MASK         = 0xff000000, ///< Mask to get command bits
 };
 
 /**
