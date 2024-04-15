@@ -126,7 +126,8 @@ public:
 
 
   /**
-   * \brief Get the next available descriptor from the available ring.
+   * Get the next available descriptor from the available ring.
+   *
    * \pre The queue must be in working state.
    * \return A Request for the next available descriptor, the Request is invalid
    *         if there are no descriptors in the available ring.
@@ -147,7 +148,8 @@ public:
   }
 
   /**
-   * \brief Test for available descriptors.
+   * Test for available descriptors.
+   *
    * \return true if there are descriptors available, false if not.
    * \pre The queue must be in working state.
    */
@@ -157,11 +159,14 @@ public:
   }
 
   /**
-   * \brief Put the given descriptor into the used ring.
-   * \param r request that shall be marked as finished.
-   * \param len the total number of bytes written.
+   * Put the given descriptor into the used ring.
+   *
+   * \param r    Request that shall be marked as finished.
+   * \param len  The total number of bytes written.
+   *
    * \pre queue must be in working state.
-   * \pre \a r must be a valid request from this queue.
+   *
+   * \pre `r` must be a valid request from this queue.
    */
   void consumed(Head_desc const &r, l4_uint32_t len = 0)
   {
@@ -171,6 +176,20 @@ public:
     ++_used->idx;
   }
 
+  /**
+   * Put multiple descriptors into the used ring.
+   *
+   * A range of descriptors, specified by `begin` and `end` iterators is
+   * added. Each iterator points to a struct that has a `first` member that
+   * is a `Head_desc` and a `second` member that is the corresponding number
+   * of bytes written.
+   *
+   * \tparam ITER   The type of the iterator (inferred).
+   * \param  begin  Iterator pointing to first new descriptor.
+   * \param  end    Iterator pointing to one past last entry.
+   *
+   * \pre queue must be in working state.
+   */
   template<typename ITER>
   void consumed(ITER const &begin, ITER const &end)
   {
@@ -185,6 +204,19 @@ public:
     _used->idx += added;
   }
 
+  /**
+   * Add a descriptor to the used ring, and notify an observer.
+   *
+   * \tparam QUEUE_OBSERVER  The type of the observer (inferred).
+   * \param  d               descriptor of the request that is to be marked as
+   *                         finished.
+   * \param  o               Pointer to the observer that is notified.
+   * \param  len             Number of bytes written for this request.
+   *
+   * \pre queue must be in working state.
+   *
+   * \pre `d` must be a valid request from this queue.
+   */
   template<typename QUEUE_OBSERVER>
   void finish(Head_desc &d, QUEUE_OBSERVER *o, l4_uint32_t len = 0)
   {
@@ -193,6 +225,20 @@ public:
     d._d = 0;
   }
 
+  /**
+   * Add a range of descriptors to the used ring, and notify an observer once.
+   *
+   * The iterators are passed to consumed<ITER>(ITER const &, ITER const &),
+   * and the requirements detailed there apply.
+   *
+   * \tparam ITER            type of the iterator (inferred)
+   * \tparam QUEUE_OBSERVER  the type of the observer (inferred).
+   * \param  begin           iterator pointing to first element.
+   * \param  end             iterator pointing to one past last element.
+   * \param  o               pointer to the observer that is notified.
+   *
+   * \pre queue must be in working state.
+   */
   template<typename ITER, typename QUEUE_OBSERVER>
   void finish(ITER const &begin, ITER const &end, QUEUE_OBSERVER *o)
   {
@@ -201,7 +247,7 @@ public:
   }
 
   /**
-   * \brief Set the 'no notify' flag for this queue.
+   * Set the 'no notify' flag for this queue.
    *
    * This function may be called on a disabled queue.
    */
@@ -212,7 +258,7 @@ public:
   }
 
   /**
-   * \brief Clear the 'no notify' flag for this queue.
+   * Clear the 'no notify' flag for this queue.
    *
    * This function may be called on a disabled queue.
    */
@@ -223,9 +269,11 @@ public:
   }
 
   /**
-   * \brief Get a descriptor from the descriptor list.
-   * \param idx the index of the descriptor.
-   * \pre \a idx < \a num
+   * Get a descriptor from the descriptor list.
+   *
+   * \param idx  The index of the descriptor.
+   *
+   * \pre `idx` < `num`
    * \pre queue must be in working state
    */
   Desc const *desc(unsigned idx) const
@@ -244,11 +292,12 @@ struct Data_buffer
   Data_buffer() = default;
 
   /**
-   * \brief Create buffer for object \a p.
-   * \tparam T  type of object (implicit)
-   * \param  p  pointer to object.
+   * \brief Create buffer for object `p`.
    *
-   * The buffer shall point to the start of the object \a p and the size left
+   * \tparam T  Type of object (implicit)
+   * \param  p  Pointer to object.
+   *
+   * The buffer shall point to the start of the object `p` and the size left
    * is sizeof(T).
    */
   template<typename T>
@@ -257,11 +306,12 @@ struct Data_buffer
   {}
 
   /**
-   * \brief Set buffer for object \a p.
-   * \tparam T  type of object (implicit)
-   * \param  p  pointer to object.
+   * Set buffer for object `p`.
    *
-   * The buffer shall point to the start of the object \a p and the size left
+   * \tparam T  Type of object (implicit)
+   * \param  p  Pointer to object.
+   *
+   * The buffer shall point to the start of the object `p` and the size left
    * is sizeof(T).
    */
   template<typename T>
@@ -272,7 +322,8 @@ struct Data_buffer
   }
 
   /**
-   * \brief Copy contents from this buffer to the destination buffer.
+   * Copy contents from this buffer to the destination buffer.
+   *
    * \param dst  Destination buffer.
    * \param max  (optional) Maximum number of bytes to copy.
    * \return the number of bytes copied.
@@ -293,7 +344,8 @@ struct Data_buffer
   }
 
   /**
-   * \brief Skip given number of bytes in this buffer.
+   * Skip given number of bytes in this buffer.
+   *
    * \param bytes  Number of bytes that shall be skipped.
    * \return The number of bytes skipped.
    *
@@ -310,7 +362,8 @@ struct Data_buffer
   }
 
   /**
-   * \brief Check if there are no more bytes left in the buffer.
+   * Check if there are no more bytes left in the buffer.
+   *
    * \return true if there are no more bytes left in the buffer.
    */
   bool done() const
@@ -320,7 +373,7 @@ struct Data_buffer
 class Request_processor;
 
 /**
- * \brief Exception used by Queue to indicate descriptor errors.
+ * Exception used by Queue to indicate descriptor errors.
  */
 struct Bad_descriptor
 {
@@ -341,7 +394,8 @@ struct Bad_descriptor
   Error error;
 
   /**
-   * \brief Make a bad descriptor exception.
+   * Make a bad descriptor exception.
+   *
    * \param proc  The request processor causing the exception
    * \param e     The error code.
    */
@@ -374,7 +428,7 @@ struct Bad_descriptor
 
 
 /**
- * \brief Encapsulate the state for processing a VIRTIO request.
+ * Encapsulate the state for processing a VIRTIO request.
  *
  * A VIRTIO request is a possibly chained list of descriptors retrieved from
  * the available ring of a virtqueue, using Virtqueue::next_avail().
@@ -389,7 +443,7 @@ struct Bad_descriptor
  *   * \code DESC_MAN::load_desc(Virtqueue::Desc const &desc,
  *                      Request_processor const *proc,
  *                      Virtqueue::Desc const **table) \endcode
- *     This function is used to dereference \a desc as an indirect descriptor
+ *     This function is used to dereference `desc` as an indirect descriptor
  *     table, and must return a pointer to an indirect descriptor table.
  *   * \code DESC_MAN::load_desc(Virtqueue::Desc const &desc,
  *                      Request_processor const *proc, ...) \endcode
@@ -448,11 +502,13 @@ public:
   }
 
   /**
-   * \brief Start processing a new request.
+   * Start processing a new request.
+   *
    * \tparam DESC_MAN  Type of descriptor manager (implicit).
-   * \param dm       Descriptor manager that is used to translate VIRTIO descriptor addresses.
-   * \param request  VIRTIO request from Virtqueue::next_avail()
-   * \param args     Extra arguments passed to dm->load_desc()
+   * \param dm         Descriptor manager that is used to translate VIRTIO
+   *                   descriptor addresses.
+   * \param request    VIRTIO request from Virtqueue::next_avail()
+   * \param args       Extra arguments passed to dm->load_desc()
    * \pre The given request must be valid.
    */
   template<typename DESC_MAN, typename ...ARGS>
@@ -463,14 +519,16 @@ public:
   }
 
   /**
-   * \brief Get the flags of the currently processed descriptor.
+   * Get the flags of the currently processed descriptor.
+   *
    * \return The flags of the currently processed descriptor.
    */
   Virtqueue::Desc::Flags current_flags() const
   { return _current.flags; }
 
   /**
-   * \brief Are there more chained descriptors?
+   * Are there more chained descriptors?
+   *
    * \return true if there are more chained descriptors in the current request.
    */
   bool has_more() const
