@@ -77,10 +77,10 @@ public:
   /// Make a Ptr from a raw 64bit address
   explicit Ptr(l4_uint64_t vm_addr) : _p(vm_addr) {}
 
-  /// \return The raw 64bit address of the pointer.
+  /// \return The raw 64bit address of the stored pointer.
   l4_uint64_t get() const { return _p; }
 
-  /// \return true if the pointer is invalid (NULL).
+  /// \return true if the stored pointer is valid (not NULL).
   bool is_valid() const { return _p != ~0ULL; }
 
 private:
