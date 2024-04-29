@@ -1,0 +1,231 @@
+
+// vi:ft=cpp
+/*
+ * Copyright (C) 2024 Kernkonzept GmbH.
+ * Author(s): Martin Kuettler <martin.kuettler@kernkonzept.com>
+ *
+ * License: see LICENSE.spdx (in this directory or the directories above)
+ */
+
+#pragma once
+
+#include <l4/re/error_helper>
+#include <l4/sys/cxx/ipc_epiface>
+
+#include <l4/l4virtio/server/virtio>
+#include <l4/l4virtio/server/l4virtio>
+#include <l4/l4virtio/l4virtio>
+
+namespace L4virtio {
+namespace Svr {
+
+/**
+ * A server implementation of the virtio-rng protocol.
+ *
+ * \tparam Rnd_state  The type that implements the random data generation.
+ *                    `Rnd_state::get_random(int len, unsigned char *buf)`
+ *                    is called to get len random bytes written into buf
+ *                    TODO: virtio-rng supports providing less random bytes
+ *                    then requested. This API currently does not support that,
+ *                    as I do not have a test case.
+ * \tparam Epiface    The Epiface to derive from. Defaults to `L4virtio::Device`.
+ */
+  template <typename Rnd_state, typename Epiface = L4virtio::Device>
+class Virtio_rng : public L4virtio::Svr::Device,
+                   public L4::Epiface_t<Virtio_rng<Rnd_state>, Epiface>
+{
+private:
+  enum
+    {
+      Num_request_queues = 1,
+      queue_size = 128,
+    };
+
+public:
+  using Random_state = Rnd_state;
+
+  /**
+   * Handler for the host irq.
+   *
+   * An `L4::Irqep_t` to handle irqs send to the server.
+   */
+  class Host_irq : public L4::Irqep_t<Host_irq>
+  {
+  public:
+    explicit Host_irq(Virtio_rng *rng) : L4::Irqep_t<Host_irq>(), _rng(rng) {}
+
+    void handle_irq()
+    {
+      _rng->handle_queue();
+    }
+
+  private:
+    Virtio_rng *_rng;
+  };
+
+  /**
+   * Handler for the Virtio requests
+   */
+  class Request_processor : public L4virtio::Svr::Request_processor
+  {
+  public:
+    struct Data_buffer : public L4virtio::Svr::Data_buffer
+    {
+      Data_buffer() = default;
+      // This constructor is called from within start, so make it available.
+      Data_buffer(L4virtio::Svr::Driver_mem_region const *r,
+                  L4virtio::Svr::Virtqueue::Desc const &d,
+                  L4virtio::Svr::Request_processor const *)
+      {
+        pos = static_cast<char *>(r->local(d.addr));
+        left = d.len;
+      }
+    };
+
+    Request_processor(L4virtio::Svr::Virtqueue *q, Random_state *rnd,
+                      Virtio_rng *rng)
+      : _q(q), _rnd(rnd), _rng(rng), _head() {}
+
+    bool init_queue()
+    {
+      auto r = _q->next_avail();
+
+      if (L4_UNLIKELY(!r))
+        return false;
+
+      _head = start(_rng->mem_info(), r, &_req);
+
+      return true;
+    }
+
+    void handle_request()
+    {
+      if (!_head)
+        if (!init_queue())
+          return;
+
+      for (;;)
+        {
+          auto const pos = reinterpret_cast<unsigned char *>(_req.pos);
+          _rnd->get_random(_req.left, pos);
+          _q->finish(_head, _rng, _req.left);
+          if (!init_queue())
+            break;
+        }
+      return;
+    }
+
+  private:
+    L4virtio::Svr::Virtqueue *_q;
+    Random_state *_rnd;
+    Virtio_rng *_rng;
+    L4virtio::Svr::Virtqueue::Head_desc _head;
+    Data_buffer _req;
+  };
+
+  Virtio_rng(Random_state *rnd,
+             L4Re::Util::Registry_server<L4Re::Util::Br_manager_hooks> *server)
+    : L4virtio::Svr::Device(&_dev_config),
+      _dev_config(L4VIRTIO_VENDOR_KK, L4VIRTIO_ID_RNG, Num_request_queues),
+      _rnd(rnd),
+      _host_irq(this),
+      _request_processor(&_q, rnd, this)
+  {
+    init_mem_info(2);
+    reset_queue_config(0, queue_size);
+    setup_queue(&_q, 0, queue_size);
+    server->registry()->register_irq_obj(&_host_irq);
+
+    L4virtio::Svr::Dev_config::Features hf;
+    hf.ring_indirect_desc() = true;
+    _dev_config.host_features(0) = hf.raw;
+    _dev_config.set_host_feature(L4VIRTIO_FEATURE_VERSION_1);
+    _dev_config.reset_hdr();
+  }
+
+  void notify_queue(L4virtio::Svr::Virtqueue *)
+  {
+    if (_q->no_notify_guest())
+      return;
+
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_VRING);
+    L4Re::chkipc(_notify_guest_irq->trigger(), "trigger guest irq");
+  }
+
+  void handle_queue()
+  {
+    _request_processor.handle_request();
+  }
+
+  void reset() override
+  {
+  }
+
+  bool check_queues() override
+  {
+    return true;
+  }
+
+  int reconfig_queue(unsigned idx) override
+  {
+    if (idx != 0)
+      return -L4_ERANGE;
+
+    setup_queue(&_q, 0, queue_size);
+
+    return L4_EOK;
+  }
+
+  void trigger_driver_config_irq() override
+  {
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_CONFIG);
+    _notify_guest_irq->trigger();
+  }
+
+  L4::Ipc_svr::Server_iface *server_iface() const override
+  {
+    return L4::Epiface::server_iface();
+  }
+
+  long op_set_status(L4virtio::Device::Rights r, unsigned status)
+  {
+    return L4virtio::Svr::Device::op_set_status(r, status);
+  }
+
+  long op_config_queue(L4virtio::Device::Rights r, unsigned queue)
+  {
+    return L4virtio::Svr::Device::op_config_queue(r, queue);
+  }
+
+  long op_device_config(L4virtio::Device::Rights r,
+                        L4::Ipc::Cap<L4Re::Dataspace> &config_ds,
+                        l4_addr_t &ds_offset)
+  {
+    return L4virtio::Svr::Device::op_device_config(r, config_ds, ds_offset);
+  }
+
+  L4::Cap<L4::Irq> device_notify_irq() const override
+  {
+    return L4::cap_cast<L4::Irq>(_host_irq.obj_cap());
+  }
+
+  void register_single_driver_irq() override
+  {
+    _notify_guest_irq = L4Re::chkcap
+      (server_iface()->template rcv_cap<L4::Irq>(0));
+
+    L4Re::chksys(server_iface()->realloc_rcv_cap(0));
+  }
+
+
+private:
+  L4virtio::Svr::Dev_config_t<L4virtio::Svr::No_custom_data>_dev_config;
+  Random_state *_rnd;
+  L4virtio::Svr::Virtqueue _q;
+  Host_irq _host_irq;
+  L4::Cap<L4::Irq> _notify_guest_irq;
+  Request_processor _request_processor;
+};
+
+} // namespace Svr
+} // namespace L4virtio
