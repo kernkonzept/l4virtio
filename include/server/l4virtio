@@ -441,6 +441,9 @@ class Driver_mem_region_t : public DATA
 public:
   struct Flags
   {
+    Flags() = default;
+    explicit Flags(l4_uint32_t raw) : raw(raw) {}
+
     l4_uint32_t raw; ///< raw flags value
     CXX_BITFIELD_MEMBER(0, 0, rw, raw); ///< read-write flag
   };
@@ -483,7 +486,7 @@ public:
    */
   Driver_mem_region_t(l4_uint64_t drv_base, l4_umword_t size,
                       l4_addr_t offset, Ds_cap &&ds)
-  : _drv_base(l4_trunc_page(drv_base)), _size(0),
+  : _drv_base(l4_trunc_page(drv_base)), _size(0), _flags(0),
     _ds_offset(l4_trunc_page(offset))
   {
     using L4Re::chksys;
