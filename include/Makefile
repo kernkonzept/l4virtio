@@ -11,6 +11,7 @@ EXTRA_TARGET += \
 	server/l4virtio \
 	server/virtio-block \
 	server/virtio-console \
-	server/virtio-console-device
+	server/virtio-console-device \
+	server/virtio-scmi-device
 
 include $(L4DIR)/mk/include.mk
