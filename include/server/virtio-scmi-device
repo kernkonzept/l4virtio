@@ -319,6 +319,7 @@ struct Proto
  * If you want to use this from a Uvmm Linux guest, the device tree needs to
  * look something like this:
  *
+ * \code
  *  firmware {
  *    scmi {
  *      compatible = "arm,scmi-virtio";
@@ -329,6 +330,7 @@ struct Proto
  *      // ... supported protocols ...
  *    };
  *  };
+ * \endcode
  */
 class Scmi_dev : public L4virtio::Svr::Device
 {
@@ -633,6 +635,7 @@ class Base_proto : public Proto<Scmi_dev>
  * If you want to use this from a Uvmm Linux guest, the device tree needs to
  * look something like this:
  *
+ * \code
  *  firmware {
  *    scmi {
  *      compatible = "arm,scmi-virtio";
@@ -653,6 +656,7 @@ class Base_proto : public Proto<Scmi_dev>
  *    reg = <0x0>;
  *    clocks = <&cpufreq 0>; // domain_id
  *  };
+ * \endcode
  */
 class Perf_proto : public Proto<Scmi_dev>
 {
