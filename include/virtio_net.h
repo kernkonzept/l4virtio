@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only OR License-Ref-kk-custom */
+/* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2022 Kernkonzept GmbH.
  * Author(s): Stephan Gerhold <stephan.gerhold@kernkonzept.com>

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Created on: 12.11.2013
  *     Author: Matthias Lange <matthias.lange@kernkonzept.com>
