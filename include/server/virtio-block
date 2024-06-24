@@ -485,6 +485,9 @@ public:
     if (req->release_request(&_queue, status, sz) < 0)
       this->device_error();
 
+    if (_queue.no_notify_guest())
+      return;
+
     _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_VRING);
     _kick_guest_irq->trigger();
 
