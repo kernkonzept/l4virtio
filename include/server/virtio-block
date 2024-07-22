@@ -452,6 +452,8 @@ public:
     df.ro() = read_only;
     set_device_features(df);
 
+    _dev_config.set_host_feature(L4VIRTIO_FEATURE_VERSION_1);
+
     _dev_config.priv_config()->capacity = capacity;
   }
 
