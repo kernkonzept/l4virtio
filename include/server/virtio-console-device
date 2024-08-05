@@ -230,7 +230,7 @@ public:
   virtual bool queues_stopped()
   { return false; }
 
-  void trigger_driver_config_irq() const override
+  void trigger_driver_config_irq() override
   {
     _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_CONFIG);
     _kick_driver_irq->trigger();
