@@ -238,7 +238,7 @@ typedef struct l4virtio_config_queue_t
   l4_uint16_t device_notify_index;
 } l4virtio_config_queue_t;
 
-EXTERN_C_BEGIN
+__BEGIN_DECLS
 
 /**
  * Get the pointer to the first queue config.
@@ -344,6 +344,6 @@ L4_CV int
 l4virtio_device_notification_irq(l4_cap_idx_t cap, unsigned index,
                                  l4_cap_idx_t irq) L4_NOTHROW;
 
-EXTERN_C_END
+__END_DECLS
 
 /**\}*/
