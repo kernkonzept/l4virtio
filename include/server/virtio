@@ -97,8 +97,6 @@ public:
     Virtqueue::Desc const *_d;
     Head_desc(Virtqueue *r, unsigned i) : _d(r->desc(i)) {}
 
-    struct Null_ptr_check;
-
   public:
     /// Make invalid (NULL) request.
     Head_desc() : _d(0) {}
@@ -107,8 +105,8 @@ public:
     bool valid() const { return _d; }
 
     /// \return True if the request is valid (not NULL).
-    operator Null_ptr_check const * () const
-    { return reinterpret_cast<Null_ptr_check const *>(_d); }
+    explicit operator bool () const
+    { return valid(); }
 
     /// \return Pointer to the head descriptor of the request.
     Desc const *desc() const
