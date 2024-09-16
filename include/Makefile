@@ -12,6 +12,7 @@ EXTRA_TARGET += \
 	server/virtio-block \
 	server/virtio-console \
 	server/virtio-console-device \
-	server/virtio-scmi-device
+	server/virtio-scmi-device \
+	server/virtio-i2c-device
 
 include $(L4DIR)/mk/include.mk

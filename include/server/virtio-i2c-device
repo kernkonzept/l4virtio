@@ -1,0 +1,346 @@
+// vi:ft=cpp; -*- mode: c++ -*-
+/*
+ * Copyright (C) 2024 Kernkonzept GmbH.
+ * Author(s): Martin Kuettler <martin.kuettler@kernkonzept.com>
+ *
+ * License: see LICENSE.spdx (in this directory or the directories above)
+ */
+
+#pragma once
+
+#include <l4/re/error_helper>
+#include <l4/sys/cxx/ipc_epiface>
+
+#include <l4/l4virtio/server/virtio>
+#include <l4/l4virtio/server/l4virtio>
+#include <l4/l4virtio/l4virtio>
+
+#include <l4/re/error_helper>
+#include <l4/re/util/object_registry>
+#include <l4/re/util/br_manager>
+#include <l4/sys/cxx/ipc_epiface>
+
+namespace L4virtio {
+namespace Svr {
+
+enum : l4_uint8_t
+{
+  I2c_msg_ok = 0,
+  I2c_msg_err = 1,
+};
+
+struct I2c_request_flags
+{
+  l4_uint32_t raw;
+
+  CXX_BITFIELD_MEMBER(0, 0, fail_next, raw);
+  CXX_BITFIELD_MEMBER(1, 1, m_rd, raw);
+};
+
+struct I2c_out_hdr
+{
+  l4_uint16_t addr;
+  l4_uint16_t padding;
+  I2c_request_flags flags;
+};
+
+struct I2c_in_hdr
+{
+  l4_uint8_t status;
+};
+
+struct I2c_req
+{
+  struct I2c_out_hdr out_hdr;
+  unsigned buf_len;
+  l4_uint8_t* buf;
+  struct I2c_in_hdr *in_hdr;
+
+  unsigned write_size;
+
+  void set_status(l4_uint8_t status)
+  {
+    in_hdr->status = status;
+  }
+};
+
+/**
+ * A server implementation of the virtio-i2c protocol.
+ *
+ * \tparam Request_handler  The type that is used to handle incomming requests.
+ *                          Needs to have `handle_read(l4_uint8_t *, unsigned)`
+ *                          and `handle_write(l4_uint8_t const *, unsigned)`
+ *                          functions.
+ * \tparam Epiface          The Epiface to derive from. Defaults to
+ *                          `L4virtio::Device`.
+ */
+template <typename Request_handler,
+          typename Epiface = L4virtio::Device>
+class Virtio_i2c : public L4virtio::Svr::Device,
+                   public L4::Epiface_t<Virtio_i2c<Request_handler,
+                                                   Epiface>,
+                                        Epiface>
+{
+private:
+  enum
+    {
+      Num_request_queues = 1,
+      queue_size = 128,
+    };
+
+public:
+  using I2c_request_handler = Request_handler;
+
+  /**
+   * Handler for the host irq.
+   *
+   * An `L4::Irqep_t` to handle irqs send to the server.
+   */
+  class Host_irq : public L4::Irqep_t<Host_irq>
+  {
+  public:
+    explicit Host_irq(Virtio_i2c *i2c) : L4::Irqep_t<Host_irq>(), _i2c(i2c) {}
+
+    void handle_irq()
+    {
+      _i2c->handle_queue();
+    }
+
+  private:
+    Virtio_i2c *_i2c;
+  };
+
+  /**
+   * Handler for the Virtio requests
+   */
+  class Request_processor : public L4virtio::Svr::Request_processor
+  {
+  public:
+
+    struct Data_buffer : public L4virtio::Svr::Data_buffer
+    {
+      Data_buffer()
+      {
+        pos = nullptr;
+        left = 0;
+      }
+      // This constructor is called from within start, so make it available.
+      Data_buffer(L4virtio::Svr::Driver_mem_region const *r,
+                  L4virtio::Svr::Virtqueue::Desc const &d,
+                  L4virtio::Svr::Request_processor const *)
+      {
+        pos = static_cast<char *>(r->local(d.addr));
+        left = d.len;
+      }
+
+    };
+
+    Request_processor(L4virtio::Svr::Virtqueue *q, I2c_request_handler *hndlr,
+                      Virtio_i2c *i2c)
+      : _q(q), _req_handler(hndlr), _i2c(i2c), _head(), _req(),
+        _fail_next(false)
+    {}
+
+    bool init_queue()
+    {
+      auto r = _q->next_avail();
+
+      if (L4_UNLIKELY(!r))
+        return false;
+
+      _head = start(_i2c->mem_info(), r, &_req);
+
+      return true;
+    }
+
+    I2c_req get_request()
+    {
+      I2c_req request;
+      memcpy(&request.out_hdr, _req.pos, sizeof(I2c_out_hdr));
+
+      Data_buffer req;
+      next(_i2c->mem_info(), &req);
+
+      request.write_size = sizeof(I2c_in_hdr);
+      if (has_more())
+        {
+          // there is more, so this is the buffer
+          request.buf_len = req.left;
+          request.buf = reinterpret_cast<l4_uint8_t*>(req.pos);
+
+          if (request.out_hdr.flags.m_rd())
+            request.write_size += request.buf_len;
+
+          next(_i2c->mem_info(), &req);
+        }
+
+      request.in_hdr = reinterpret_cast<I2c_in_hdr*>(req.pos);
+
+      return request;
+    }
+
+    void handle_request()
+    {
+      if (!_head)
+        if (!init_queue())
+          return;
+
+      for (;;)
+        {
+          auto r = get_request();
+          if (_fail_next)
+            {
+              r.set_status(I2c_msg_err);
+              _fail_next = r.out_hdr.flags.fail_next();
+            }
+          else
+            {
+              bool ok;
+              if (r.out_hdr.flags.m_rd())
+                ok = _req_handler->handle_read(r.buf, r.buf_len);
+              else
+                ok = _req_handler->handle_write(r.buf, r.buf_len);
+              if (ok)
+                {
+                  r.set_status(I2c_msg_ok);
+                  _fail_next = false;
+                }
+              else
+                {
+                  r.set_status(I2c_msg_err);
+                  _fail_next = r.out_hdr.flags.fail_next();
+                }
+            }
+          _q->finish(_head, _i2c, r.write_size);
+          if (!init_queue())
+            break;
+        }
+      return;
+    }
+
+  private:
+    L4virtio::Svr::Virtqueue *_q;
+    I2c_request_handler *_req_handler;
+    Virtio_i2c *_i2c;
+    L4virtio::Svr::Virtqueue::Head_desc _head;
+    Data_buffer _req;
+    bool _fail_next;
+  };
+
+  struct Features : public L4virtio::Svr::Dev_config::Features
+  {
+    Features() = default;
+    Features(l4_uint32_t raw) : L4virtio::Svr::Dev_config::Features(raw) {}
+
+    // This feature is mandatory. The driver is requested to abort communication
+    // if this is not offered.
+    CXX_BITFIELD_MEMBER(0,  0, zero_length_request, raw);
+  };
+
+  Virtio_i2c(I2c_request_handler *hndlr,
+             L4Re::Util::Registry_server<L4Re::Util::Br_manager_hooks> *server)
+    : L4virtio::Svr::Device(&_dev_config),
+      _dev_config(L4VIRTIO_VENDOR_KK, L4VIRTIO_ID_I2C, Num_request_queues),
+      _req_handler(hndlr),
+      _host_irq(this),
+      _request_processor(&_q, hndlr, this)
+  {
+    init_mem_info(2);
+    reset_queue_config(0, queue_size);
+    setup_queue(&_q, 0, queue_size);
+    server->registry()->register_irq_obj(&_host_irq);
+
+    Features hf(0);
+    hf.ring_indirect_desc() = true;
+    hf.zero_length_request() = true;
+    _dev_config.host_features(0) = hf.raw;
+    _dev_config.set_host_feature(L4VIRTIO_FEATURE_VERSION_1);
+    _dev_config.reset_hdr();
+  }
+
+  void notify_queue(L4virtio::Svr::Virtqueue *)
+  {
+    if (_q.no_notify_guest())
+      return;
+
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_VRING);
+    L4Re::chkipc(_notify_guest_irq->trigger(), "trigger guest irq");
+  }
+
+  void handle_queue()
+  {
+    _request_processor.handle_request();
+  }
+
+  void reset() override
+  {
+  }
+
+  bool check_queues() override
+  {
+    return true;
+  }
+
+  int reconfig_queue(unsigned idx) override
+  {
+    if (idx != 0)
+      return -L4_ERANGE;
+
+    setup_queue(&_q, 0, queue_size);
+
+    return L4_EOK;
+  }
+
+  void trigger_driver_config_irq() override
+  {
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_CONFIG);
+    _notify_guest_irq->trigger();
+  }
+
+  L4::Ipc_svr::Server_iface *server_iface() const override
+  {
+    return L4::Epiface::server_iface();
+  }
+
+  long op_set_status(L4virtio::Device::Rights r, unsigned status)
+  {
+    return L4virtio::Svr::Device::op_set_status(r, status);
+  }
+
+  long op_config_queue(L4virtio::Device::Rights r, unsigned queue)
+  {
+    return L4virtio::Svr::Device::op_config_queue(r, queue);
+  }
+
+  long op_device_config(L4virtio::Device::Rights r,
+                        L4::Ipc::Cap<L4Re::Dataspace> &config_ds,
+                        l4_addr_t &ds_offset)
+  {
+    return L4virtio::Svr::Device::op_device_config(r, config_ds, ds_offset);
+  }
+
+  L4::Cap<L4::Irq> device_notify_irq() const override
+  {
+    return L4::cap_cast<L4::Irq>(_host_irq.obj_cap());
+  }
+
+  void register_single_driver_irq() override
+  {
+    _notify_guest_irq = L4Re::chkcap
+      (server_iface()->template rcv_cap<L4::Irq>(0));
+
+    L4Re::chksys(server_iface()->realloc_rcv_cap(0));
+  }
+
+
+private:
+  L4virtio::Svr::Dev_config_t<L4virtio::Svr::No_custom_data>_dev_config;
+  I2c_request_handler *_req_handler;
+  L4virtio::Svr::Virtqueue _q;
+  Host_irq _host_irq;
+  L4::Cap<L4::Irq> _notify_guest_irq;
+  Request_processor _request_processor;
+};
+
+} // namespace Svr
+} // namespace L4virtio
