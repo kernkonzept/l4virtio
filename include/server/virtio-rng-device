@@ -145,7 +145,7 @@ public:
 
   void notify_queue(L4virtio::Svr::Virtqueue *)
   {
-    if (_q->no_notify_guest())
+    if (_q.no_notify_guest())
       return;
 
     _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_VRING);
