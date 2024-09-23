@@ -318,6 +318,8 @@ public:
           {
             q->finish(p.request, this);
             p.request = Virtqueue::Request();
+            device_error();
+            break;
           }
       }
 
@@ -375,7 +377,9 @@ public:
               }
           }
         catch (Bad_descriptor const &)
-          { /* Ignore */ }
+          {
+            device_error();
+          }
 
         q->finish(r, this, chunk);
         total += chunk;
