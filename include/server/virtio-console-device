@@ -48,6 +48,8 @@ struct Device_port : public Port
   {
     Port::reset();
     request = Virtqueue::Request();
+    poll_in_req = true;
+    poll_out_req = true;
   }
 };
 
