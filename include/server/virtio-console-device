@@ -42,7 +42,7 @@ struct Device_port : public Port
   Buffer src; ///< Source data block to process.
 
   bool poll_in_req = true;
-  bool poll_out_req = false;
+  bool poll_out_req = true;
 
   void reset() override
   {
