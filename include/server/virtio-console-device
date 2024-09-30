@@ -145,8 +145,7 @@ public:
   explicit Device(unsigned vq_max)
   : Virtio_con(1, false),
     _irq_handler(this),
-    _ports(cxx::make_unique<Device_port[]>(1)),
-    _control_message_stalled(0)
+    _ports(cxx::make_unique<Device_port[]>(1))
   {
     _ports[0].vq_max = vq_max;
     reset_queue_configs();
@@ -164,11 +163,8 @@ public:
   explicit Device(unsigned vq_max, unsigned ports)
   : Virtio_con(ports, true),
     _irq_handler(this),
-    _ports(cxx::make_unique<Device_port[]>(ports)),
-    _control_message_stalled(0)
+    _ports(cxx::make_unique<Device_port[]>(ports))
   {
-    if (ports > sizeof(_control_message_stalled) * 8)
-      L4Re::chksys(-L4_ENOMEM, "Only 32 ports are supported.");
     for (unsigned i = 0; i < ports; ++i)
       _ports[i].vq_max = vq_max;
     reset_queue_configs();
@@ -186,12 +182,8 @@ public:
   explicit Device(cxx::static_vector<unsigned> const &vq_max_nums)
   : Virtio_con(vq_max_nums.size(), true),
     _irq_handler(this),
-    _ports(cxx::make_unique<Device_port[]>(max_ports())),
-    _control_message_stalled(0)
+    _ports(cxx::make_unique<Device_port[]>(max_ports()))
   {
-    if (max_ports() > sizeof(_control_message_stalled)*8)
-      L4Re::chksys(-L4_ENOMEM, "Only 32 ports are supported.");
-
     for (unsigned i = 0; i < vq_max_nums.size(); ++i)
       _ports[i].vq_max = vq_max_nums[i];
     reset_queue_configs();
@@ -244,7 +236,7 @@ public:
       return;
 
     // We're not interested in logging any errors, just ignore return value.
-    do_control_work();
+    handle_control_message();
 
     for (unsigned i = 0; i < max_ports(); ++i)
       {
@@ -393,30 +385,6 @@ public:
     return total;
   }
 
-   /**
-    * Receive new control messages and resend stalled ones.
-    *
-    * \retval see `handle_control_message()`
-    *
-    * As it may happen that the driver is not able to receive a control
-    * message, there may be some stalled control message. This function checks
-    * if such messages exist and tries to resend them once more. Afterwards it
-    * checks for new messages from the driver, see `handle_control_message()`.
-    */
-  int do_control_work()
-  {
-    if (_control_message_stalled)
-      resend_stalled_control_messages();
-
-    return handle_control_message();
-  }
-
-  bool ctrl_work_pending() const
-  {
-    return (L4_LIKELY(_ctrl_port.queues_ready())
-           && _ctrl_port.tx.desc_avail()) || _control_message_stalled;
-  }
-
   /**
    * Callback called on DEVICE_READY event.
    *
@@ -435,7 +403,7 @@ public:
       return;
 
     for (unsigned i = 0; i < max_ports(); ++i)
-      check_stalled(i, port_add(i));
+      port_add(i);
   }
 
   /**
@@ -457,7 +425,7 @@ public:
 
     Port *p = port(id);
     if (p->status == Port::Port_failed)
-      check_stalled(id, port_remove(id));
+      port_remove(id);
   }
 
   /**
@@ -474,40 +442,9 @@ public:
    * answer the driver's messages, see `port_open()`.
    */
   void process_port_open(l4_uint32_t id, l4_uint16_t value) override
-  { check_stalled(id, port_open(id, value)); }
+  { port_open(id, value); }
 
 protected:
-  /**
-   * Try to resend a stalled control message and update the port and global
-   * state accordingly.
-   */
-  void resend_stalled_control_messages()
-  {
-    for (unsigned i = 0; i < max_ports(); ++i)
-      {
-        if (!(_control_message_stalled & (1U << i)))
-          continue;
-
-        switch(_ports[i].status)
-          {
-          case Port::Port_disabled:
-            check_stalled(i, port_add(i));
-            break;
-          case Port::Port_failed:
-            check_stalled(i, port_remove(i));
-            break;
-          case Port::Port_ready:
-            check_stalled(i, port_open(i, 1));
-            break;
-          case Port::Port_open:
-            check_stalled(i, port_open(i, 0));
-            break;
-          default:
-            break;
-          }
-      }
-  }
-
   Port* port(unsigned idx) override
   {
     return &_ports[idx];
@@ -518,20 +455,10 @@ protected:
     return &_ports[idx];
   }
 
-  void check_stalled(unsigned port, int retval)
-  {
-    if (retval == -L4_ENODEV  || retval == -L4_EBUSY)
-          _control_message_stalled |= 1U << port;
-        else
-          _control_message_stalled &= ~1U << port;
-  }
-
 private:
   Irq_object _irq_handler;
   cxx::unique_ptr<Device_port[]> _ports;
   L4Re::Util::Unique_cap<L4::Irq> _kick_driver_irq;
-  /// Bitmap of ports that require a control message to be sent.
-  l4_uint32_t _control_message_stalled;
 };
 
 }}} // name space
