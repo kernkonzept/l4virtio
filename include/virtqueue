@@ -16,8 +16,8 @@
 namespace L4virtio {
 
 #if defined(__ARM_ARCH) && __ARM_ARCH == 7
-static inline void wmb() { asm volatile ("dmb" : : : "memory"); }
-static inline void rmb() { asm volatile ("dmb" : : : "memory"); }
+static inline void wmb() { asm volatile ("dmb ishst" : : : "memory"); }
+static inline void rmb() { asm volatile ("dmb ish"   : : : "memory"); }
 #elif defined(__ARM_ARCH) && __ARM_ARCH >= 8
 static inline void wmb() { asm volatile ("dsb ishst" : : : "memory"); }
 static inline void rmb() { asm volatile ("dsb ishld" : : : "memory"); }
