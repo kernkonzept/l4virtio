@@ -440,7 +440,7 @@ public:
    * The default implementation does nothing. Override it to implement some
    * custom logic to respond to open/close events of the driver.
    */
-  virtual void process_port_open(l4_uint32_t, l4_uint16_t)
+  virtual void process_port_open(l4_uint32_t id, l4_uint16_t value)
   {}
 
 protected:
