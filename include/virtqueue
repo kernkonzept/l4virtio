@@ -15,17 +15,10 @@
 
 namespace L4virtio {
 
-// __ARM_ARCH_7A__ not defined by Clang
-#if defined(__ARM_ARCH_7A__) \
-    || (   defined(__ARM_ARCH) && __ARM_ARCH == 7 \
-        && defined(__ARM_ARCH_PROFILE) && __ARM_ARCH_PROFILE >= 'A')
+#if defined(__ARM_ARCH) && __ARM_ARCH == 7
 static inline void wmb() { asm volatile ("dmb" : : : "memory"); }
 static inline void rmb() { asm volatile ("dmb" : : : "memory"); }
-// __ARM_ARCH_8A__ not defined by Clang
-#elif defined(__ARM_ARCH_8A) \
-    || (   defined(__ARM_ARCH) && __ARM_ARCH == 8 \
-        && defined(__ARM_ARCH_PROFILE) && __ARM_ARCH_PROFILE >= 'A') \
-    || (defined(__ARM_ARCH) && __ARM_ARCH > 8)
+#elif defined(__ARM_ARCH) && __ARM_ARCH >= 8
 static inline void wmb() { asm volatile ("dsb ishst" : : : "memory"); }
 static inline void rmb() { asm volatile ("dsb ishld" : : : "memory"); }
 #elif defined(__mips__)
