@@ -393,9 +393,8 @@ public:
    *
    * By default, this function adds all ports if the driver indicates
    * successful initialization. Override this function to perform custom
-   * actions for a DEVICE_READY event, _after_ the generic management of the
-   * base class. It is then your responsibility to inform the driver about
-   * usable ports, see `port_add()`.
+   * actions for a DEVICE_READY event. It is then your responsibility to inform
+   * the driver about usable ports, see `port_add()`.
    */
   void process_device_ready(l4_uint16_t value) override
   {
