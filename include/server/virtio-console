@@ -562,13 +562,13 @@ public:
         if (req.len < sizeof(msg))
           {
             // Just ignore malformed input.
-            q->consumed(r);
+            q->finish(r, this);
             ret = -L4_EINVAL;
             continue;
           }
 
         memcpy(&msg, req.msg, sizeof(msg));
-        q->consumed(r);
+        q->finish(r, this);
 
         if (_ctrl_port.status == Port::Port_disabled)
           {
