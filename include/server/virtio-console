@@ -481,13 +481,13 @@ public:
         if (!ctrl_queue_ready())
           continue;
 
+        // Ignore invalid port ids
+        if (msg.id >= max_ports())
+          break;
+
         switch (msg.event)
           {
           case Control_message::Port_ready:
-            // Ignore invalid port ids
-            if (msg.id >= max_ports())
-              break;
-
             // Ignore repeated PORT_READY messages.
             if ((port(msg.id)->status == Port::Port_disabled)
                 || (!msg.value && port(msg.id)->status == Port::Port_added))
@@ -497,10 +497,6 @@ public:
             break;
 
           case Control_message::Port_open:
-            // Ignore invalid port ids
-            if (msg.id >= max_ports())
-              break;
-
             // Ignore misplaced PORT_OPEN messages.
             if ((msg.value && port(msg.id)->status != Port::Port_ready)
                 || (!msg.value && port(msg.id)->status != Port::Port_open))
