@@ -441,7 +441,10 @@ public:
    * custom logic to respond to open/close events of the driver.
    */
   virtual void process_port_open(l4_uint32_t id, l4_uint16_t value)
-  {}
+  {
+    static_cast<void>(id);
+    static_cast<void>(value);
+  }
 
 protected:
   Port* port(unsigned idx) override
