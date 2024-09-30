@@ -651,8 +651,8 @@ public:
    * \param value  The value field of the control message, indicating if the
    *               port was opened or closed.
    *
-   * Needs to be overridden by the derived class if the MULTIPORT feature is
-   * enabled. The device must acknowledge the message by calling `port_open()`.
+   * Signal that an application has opened the port. Can to be overridden by
+   * the derived class if the MULTIPORT feature is enabled.
    */
   virtual void process_port_open(l4_uint32_t id, l4_uint16_t value) = 0;
 
