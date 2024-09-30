@@ -19,8 +19,8 @@ namespace L4virtio {
 static inline void wmb() { asm volatile ("dmb ishst" : : : "memory"); }
 static inline void rmb() { asm volatile ("dmb ish"   : : : "memory"); }
 #elif defined(__ARM_ARCH) && __ARM_ARCH >= 8
-static inline void wmb() { asm volatile ("dsb ishst" : : : "memory"); }
-static inline void rmb() { asm volatile ("dsb ishld" : : : "memory"); }
+static inline void wmb() { asm volatile ("dmb ishst" : : : "memory"); }
+static inline void rmb() { asm volatile ("dmb ishld" : : : "memory"); }
 #elif defined(__mips__)
 static inline void wmb() { asm volatile ("sync" : : : "memory"); }
 static inline void rmb() { asm volatile ("sync" : : : "memory"); }
