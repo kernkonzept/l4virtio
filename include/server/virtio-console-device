@@ -412,11 +412,12 @@ public:
    * \param value  The value field of the control message, indicating if the
    *               initialization was successful.
    *
-   * By default, this function removes the port, if the driver failed to set it
-   * up correctly. Override this function to perform custom actions for a
+   * By default, this function opens the port if the driver is ready.
+   * Otherwise, the port is removed if the driver failed to set it up
+   * correctly. Override this function to perform custom actions for a
    * PORT_READY event, _after_ the generic management of the base class. It is
-   * then your responsibility to inform the driver about unusable ports, see
-   * `port_remove()`.
+   * then your responsibility to inform the driver about connected or unusable
+   * ports. See `port_open()` and `port_remove()`.
    */
   void process_port_ready(l4_uint32_t id, l4_uint16_t value) override
   {
@@ -425,6 +426,8 @@ public:
     Port *p = port(id);
     if (p->status == Port::Port_failed)
       port_remove(id);
+    else if (p->status == Port::Port_ready)
+      port_open(id, true);
   }
 
   /**
@@ -434,14 +437,11 @@ public:
    * \param value  The value field of the control message, indicating if the
    *               port was opened or closed.
    *
-   * By default, this function acknowledges the message from the driver by
-   * sending back the same message. Override this function to perform custom
-   * actions for a PORT_OPEN event, _after_ the generic management of the base
-   * class. It is then your responsibility to update the internal port state and
-   * answer the driver's messages, see `port_open()`.
+   * The default implementation does nothing. Override it to implement some
+   * custom logic to respond to open/close events of the driver.
    */
-  void process_port_open(l4_uint32_t id, l4_uint16_t value) override
-  { port_open(id, value); }
+  virtual void process_port_open(l4_uint32_t, l4_uint16_t)
+  {}
 
 protected:
   Port* port(unsigned idx) override
