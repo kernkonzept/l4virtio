@@ -94,7 +94,9 @@ struct Control_request
  *         | process_port_ready(1)             |        |
  *         v                                   | FAILED |
  *    +----------+   process_port_ready(0)     |        |
- *    |  READY   |---------------------------->|        |
+ *    |          |---------------------------->|        |
+ *    |  READY   |   process_port_ready(1)     |        |
+ *    |          |<----------------------------|        |
  *    +----------+<----------+                 +--------+
  *         |                 |                      ^
  *         | port_open(true) | port_open(false)     |
@@ -120,7 +122,9 @@ struct Port
     /// Port is in a working state.
     Port_open,
     /// Device failure, port unusable.
-    Port_failed
+    Port_failed,
+    /// Number of port states. Must be last.
+    Port_num_states,
   };
 
   /// Size of control queues, also used as default size.
@@ -129,6 +133,7 @@ struct Port
   Virtqueue tx; ///< Receiveq of the port.
   Virtqueue rx; ///< Transmitq of the port.
   Port_status status; ///< State the port is in.
+  Port_status reported_status; ///< State the port was last reported.
   unsigned vq_max; ///< Maximum queue sizes for this port.
 
   Port() : status(Port_disabled), vq_max(Control_queue_size) {}
@@ -145,6 +150,7 @@ struct Port
   virtual void reset()
   {
     status = Port_disabled;
+    reported_status = Port_disabled;
   }
 
   /// Check that both virtqueues are set up correctly.
@@ -158,6 +164,82 @@ struct Port
   /// Check that device implementation may read from transmit queues.
   bool tx_ready() const
   { return is_open() && tx.ready(); }
+
+  /// State transition from last report state to current state
+  struct Transition {
+    l4_int16_t  event;  ///< Control_message::Events or <0 if no event is sent.
+    l4_uint16_t value;  ///< Extra information.
+    Port_status next;   ///< Next Port_status state
+  };
+
+  /**
+   * State transition table from last report state to current state.
+   *
+   * Not all transitions can be made directly. For example, if the last
+   * reported state was `Port_disabled` and the current state is `Port_open`,
+   * the device has to send two messages: `Control_message::Device_add` and
+   * `Control_message::Port_open`. This is expressed by going through an
+   * intermediate state (`Port_ready`) on the reporting side.
+   *
+   * For the purpose of the driver there are only three coarse states:
+   *
+   *   1. The port does not exist (Port_disabled).
+   *   2. The port exists but is closed on the device side (Port_added,
+   *      Port_ready, Port_failed).
+   *   3. The port exists and is open on the device side (Port_open).
+   *
+   * The state transition table with Port_added, Port_ready and Port_failed as
+   * current state are thus identical.
+   */
+  static constexpr Transition
+  state_transitions[Port_num_states][Port_num_states] =
+  {
+    /*   reported            current     */
+
+    /* Port_disabled */ /* Port_disabled */ {{ -1, 0, Port_disabled },
+                        /* Port_added    */  { Control_message::Device_add, 0,
+                                               Port_added },
+                        /* Port_ready    */  { Control_message::Device_add, 0,
+                                               Port_ready },
+                        /* Port_open     */  { Control_message::Device_add, 0,
+                                               Port_ready },
+                        /* Port_failed   */  { Control_message::Device_add, 0,
+                                               Port_failed }},
+
+    /* Port_added    */ /* Port_disabled */ {{ Control_message::Device_remove,
+                                               0, Port_disabled },
+                        /* Port_added    */  { -1, 0, Port_added },
+                        /* Port_ready    */  { -1, 0, Port_ready },
+                        /* Port_open     */  { Control_message::Port_open, 1,
+                                               Port_open },
+                        /* Port_failed   */  { -1, 0, Port_failed }},
+
+    /* Port_ready    */ /* Port_disabled */ {{ Control_message::Device_remove,
+                                               0, Port_disabled },
+                        /* Port_added    */  { -1, 0, Port_added },
+                        /* Port_ready    */  { -1, 0, Port_ready },
+                        /* Port_open     */  { Control_message::Port_open, 1,
+                                               Port_open },
+                        /* Port_failed   */  { -1, 0, Port_failed }},
+
+    /* Port_open     */ /* Port_disabled */ {{ Control_message::Port_open, 0,
+                                               Port_ready },
+                        /* Port_added    */  { Control_message::Port_open, 0,
+                                               Port_added },
+                        /* Port_ready    */  { Control_message::Port_open, 0,
+                                               Port_ready },
+                        /* Port_open     */  { -1, 0, Port_open },
+                        /* Port_failed   */  { Control_message::Port_open, 0,
+                                               Port_ready }},
+
+    /* Port_failed   */ /* Port_disabled */ {{ Control_message::Device_remove,
+                                               0, Port_disabled },
+                        /* Port_added    */  { -1, 0, Port_added },
+                        /* Port_ready    */  { -1, 0, Port_ready },
+                        /* Port_open     */  { Control_message::Port_open, 1,
+                                               Port_open },
+                        /* Port_failed   */  { -1, 0, Port_failed }},
+  };
 };
 
 /**
@@ -289,10 +371,9 @@ public:
    * \param idx  Port that should be added.
    *
    * \retval L4_EOK     Message has been sent.
-   * \retval -L4_EPERM  Control message is not allowed in the current state.
-   * \return Errors from send_control_message()
+   * \retval -L4_EPERM  Invalid state transition.
    *
-   * \pre `port` must be smaller than the configured number of ports.
+   * \pre `idx` must be smaller than the configured number of ports.
    * \pre Port must not already exist.
    */
   int port_add(unsigned idx)
@@ -302,12 +383,10 @@ public:
     if (p->status != Port::Port_disabled)
       return -L4_EPERM;
 
-    int ret = send_control_message(idx, Control_message::Device_add);
+    p->status = Port::Port_added;
+    port_report_status(idx);
 
-    if (ret == L4_EOK)
-      p->status = Port::Port_added;
-
-    return ret;
+    return L4_EOK;
   }
 
   /**
@@ -316,27 +395,22 @@ public:
    * \param idx  Port that should be removed.
    *
    * \retval L4_EOK      Message has been sent.
-   * \retval -L4_EPERM   Control message is not allowed in the current state.
-   * \return Errors from send_control_message()
+   * \retval -L4_EPERM  Invalid state transition.
    *
-   * \pre `port` must be smaller than the configured number of ports.
+   * \pre `idx` must be smaller than the configured number of ports.
    * \pre Port must already exist.
    */
   int port_remove(unsigned idx)
   {
     Port *p = port(idx);
 
-    if (p->status != Port::Port_open
-        && p->status != Port::Port_ready
-        && p->status != Port::Port_failed)
+    if (p->status == Port::Port_disabled)
       return -L4_EPERM;
 
-    int ret = send_control_message(idx, Control_message::Device_remove);
+    p->status = Port::Port_disabled;
+    port_report_status(idx);
 
-    if (ret == L4_EOK)
-      p->reset();
-
-    return ret;
+    return L4_EOK;
   }
 
   /**
@@ -346,11 +420,10 @@ public:
    * \param open  Open or close port.
    *
    * \retval L4_EOK      Message has been sent.
-   * \retval -L4_EPERM   Control message is not allowed in the current state.
-   * \return Errors from send_control_message()
+   * \retval -L4_EPERM  Invalid state transition.
    *
-   * \pre `port` must be smaller than the configured number of ports.
-   * \pre Port must already exist.
+   * \pre `idx` must be smaller than the configured number of ports.
+   * \pre Port must be ready when opening or open when closing.
    */
   int port_open(unsigned idx, bool open)
   {
@@ -360,12 +433,10 @@ public:
         || (!open && p->status != Port::Port_open))
       return -L4_EPERM;
 
-    int ret = send_control_message(idx, Control_message::Port_open, open);
+    p->status = open ? Port::Port_open : Port::Port_ready;
+    port_report_status(idx);
 
-    if (ret == L4_EOK)
-      p->status = open ? Port::Port_open : Port::Port_ready;
-
-    return ret;
+    return L4_EOK;
   }
 
   /**
@@ -464,6 +535,16 @@ public:
    */
   int handle_control_message()
   {
+    // Report port state transitions if that failed in the past...
+    if (_report_port_state)
+      {
+        _report_port_state = false;
+
+        for (unsigned i = 0; i < _num_ports; ++i)
+          if (!port_report_status(i))
+            _report_port_state = true;
+      }
+
     Virtqueue *q = &_ctrl_port.tx;
     if (!q->ready())
       return -L4_ENODEV;
@@ -512,20 +593,9 @@ public:
         switch (msg.event)
           {
           case Control_message::Port_ready:
-            // Ignore repeated PORT_READY messages.
-            if ((port(msg.id)->status == Port::Port_disabled)
-                || (!msg.value && port(msg.id)->status == Port::Port_added))
-              break;
-
             process_port_ready(msg.id, msg.value);
             break;
-
           case Control_message::Port_open:
-            // Ignore misplaced PORT_OPEN messages.
-            if ((msg.value && port(msg.id)->status != Port::Port_ready)
-                || (!msg.value && port(msg.id)->status != Port::Port_open))
-              break;
-
             process_port_open(msg.id, msg.value);
             break;
           default:
@@ -568,6 +638,7 @@ public:
     reset_queue_configs();
     _dev_config.reset_hdr();
     _negotiated_features = Features(0);
+    _report_port_state = false;
 
     reset_device();
   }
@@ -704,7 +775,39 @@ private:
       return &p->rx;
   }
 
+  /**
+   * Report the current state of the port to the driver.
+   *
+   * On each state transition, the state might need to be reported to the
+   * driver. Because the control queue might run out of buffers, the reported
+   * state might deviate a longer time from the actual device port state.
+   *
+   * \retval false  The state transition could not be fully reported.
+   * \retval true   Reported state matches current port state.
+   */
+  bool port_report_status(unsigned idx)
+  {
+    Port *p = port(idx);
+    while (p->status != p->reported_status)
+      {
+        auto const &trans
+          = Port::state_transitions[p->reported_status][p->status];
+
+        if (trans.event >= 0
+            && send_control_message(idx, trans.event, trans.value) < 0)
+          {
+            _report_port_state = true;
+            return false;
+          }
+
+        p->reported_status = trans.next;
+      }
+
+    return true;
+  }
+
   unsigned _num_ports;
+  bool _report_port_state = false;
 
 protected:
   Dev_config_t<Serial_config_space> _dev_config;
