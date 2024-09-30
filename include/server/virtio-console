@@ -369,6 +369,29 @@ public:
   }
 
   /**
+   * Send a PORT_NAME message to announce the port name.
+   *
+   * \param idx   Port that should be opened or closed.
+   * \param name  The port name
+   *
+   * \retval L4_EOK      Message has been sent.
+   * \retval -L4_EPERM   Control message is not allowed in the current state.
+   * \return Errors from send_control_message()
+   *
+   * \pre `idx` must be smaller than the configured number of ports.
+   * \pre Port must already exist.
+   */
+  int port_name(unsigned idx, char const *name)
+  {
+    Port *p = port(idx);
+
+    if (p->status == Port::Port_disabled)
+      return -L4_EPERM;
+
+    return send_control_message(idx, Control_message::Port_name, 0, name);
+  }
+
+  /**
    * Send control message to driver.
    *
    * \param idx    Port number.
