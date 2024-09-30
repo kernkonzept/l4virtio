@@ -432,7 +432,6 @@ public:
    *
    * \retval L4_EOK      Message has been handled.
    * \retval -L4_ENODEV  Control queue is not ready.
-   * \retval -L4_EBUSY   Currently no descriptor available in the control queue.
    * \retval -L4_EINVAL  Received an unexpected control event.
    *
    * This function performs the basic handling of control messages from the
@@ -446,6 +445,7 @@ public:
     if (!q->ready())
       return -L4_ENODEV;
 
+    int ret = L4_EOK;
     Virtqueue::Request r;
     while ((r = q->next_avail()))
       {
@@ -459,7 +459,8 @@ public:
           {
             // Just ignore malformed input.
             q->consumed(r);
-            return L4_EOK;
+            ret = -L4_EINVAL;
+            continue;
           }
 
         memcpy(&msg, req.msg, sizeof(msg));
@@ -505,11 +506,12 @@ public:
             process_port_open(msg.id, msg.value);
             break;
           default:
-            return -L4_EINVAL;
+            ret = -L4_EINVAL;
+            break;
           }
       }
 
-    return L4_EOK;
+    return ret;
   }
 
   /// \internal
