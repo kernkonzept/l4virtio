@@ -66,7 +66,7 @@ public:
   void setup_device(L4::Cap<L4virtio::Device> srvcap)
   {
     // Contact device.
-    driver_connect(srvcap);
+    driver_connect(srvcap, false);
 
     if (_config->device != L4VIRTIO_ID_NET)
       L4Re::chksys(-L4_ENODEV, "Device is not a network device.");
@@ -134,6 +134,17 @@ public:
         desc.len = sizeof(Packet);
       }
 
+    // Setup notification IRQ
+    _driver_notification_irq =
+      L4Re::chkcap(L4Re::Util::make_unique_cap<L4::Irq>(),
+                   "Allocate notification capability");
+
+    L4Re::chksys(l4_error(e->factory()->create(_driver_notification_irq.get())),
+                 "Create irq for notifications from device");
+
+    L4Re::chksys(_device->bind(0, _driver_notification_irq.get()),
+                 "Bind driver notification interrupt");
+
     // Finish handshake with device
     l4virtio_set_feature(_config->driver_features_map,
                          L4VIRTIO_FEATURE_VERSION_1);
@@ -147,6 +158,17 @@ public:
   l4virtio_net_config_t const &device_config() const
   {
     return *_config->device_config<l4virtio_net_config_t>();
+  }
+
+  /**
+   * Bind the rx notification IRQ to the specified thread.
+   *
+   * \param thread  Thread to bind the notification IRQ to.
+   * \param label   Label to assign to the IRQ.
+   */
+  int bind_rx_notification_irq(L4::Cap<L4::Thread> thread, l4_umword_t label)
+  {
+    return l4_error(_driver_notification_irq->bind_thread(thread, label));
   }
 
   /**
@@ -166,16 +188,30 @@ public:
    * Block until a network packet has been received from the device and return
    * the descriptor number.
    *
+   * \pre The calling thread must be bound to the rx notification IRQ via
+   *      `bind_rx_notification_irq()`.
+   *
    * \param[out] len  (optional) Length of valid data in RX packet.
    *
    * \return  Descriptor number of received packet.
    *
    * The packet data can be obtained with rx_pkt(). finish_rx() should be
    * called after the packet buffer can be returned to the RX queue.
+   *
    */
   l4_uint16_t wait_rx(l4_uint32_t *len = nullptr)
   {
-    auto descno = L4Re::chksys(wait_for_next_used(_rxq, len), "Wait for RX");
+    l4_uint16_t descno;
+    // Wait until used descriptor becomes available.
+    for (;;)
+      {
+        descno = _rxq.find_next_used(len);
+        if (descno != Virtqueue::Eoq)
+          break;
+
+        L4Re::chksys(_driver_notification_irq->receive(), "Wait for RX");
+      }
+
     if (len)
       // Ensure that the length provided by the device in wait_for_next_used()
       // is not larger than the buffer and subtract the length of the header.
@@ -255,6 +291,7 @@ private:
 private:
   L4Re::Util::Unique_cap<L4Re::Dataspace> _queue_ds;
   L4Re::Rm::Unique_region<l4_uint8_t *> _queue_region;
+  L4Re::Util::Unique_cap<L4::Irq> _driver_notification_irq;
   L4virtio::Driver::Virtqueue _rxq, _txq;
   Packet *_rxpkts, *_txpkts;
 };
