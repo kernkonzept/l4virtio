@@ -160,28 +160,50 @@ public:
       return true;
     }
 
+    /**
+     * Linux prepares the I2C request in three data parts:
+     * 1st: out_hdr
+     * 2nd: buffer (optional)
+     * 3rd: in_hdr
+     *
+     * This parses the three Data_buffers and recreate the
+     * virtio_i2c_req structure.
+     */
     I2c_req get_request()
     {
       I2c_req request;
       memcpy(&request.out_hdr, _req.pos, sizeof(I2c_out_hdr));
 
-      Data_buffer req;
-      next(_i2c->mem_info(), &req);
-
+      // number of bytes to be written in the answer.
       request.write_size = sizeof(I2c_in_hdr);
-      if (has_more())
-        {
-          // there is more, so this is the buffer
-          request.buf_len = req.left;
-          request.buf = reinterpret_cast<l4_uint8_t*>(req.pos);
+      request.buf_len = 0;
 
+      Data_buffer req;
+      // 2nd part: either the optional buffer or the in_hdr
+      if (next(_i2c->mem_info(), &req))
+        {
+
+          request.buf_len += req.left;
+          request.buf = reinterpret_cast<l4_uint8_t *>(req.pos);
+        }
+
+      // 3rd part: in_hdr
+      if (next(_i2c->mem_info(), &req))
+        {
+          // 2nd part was indeed a buffer
           if (request.out_hdr.flags.m_rd())
             request.write_size += request.buf_len;
 
-          next(_i2c->mem_info(), &req);
+          // actual 3rd part
+          request.in_hdr = reinterpret_cast<I2c_in_hdr *>(req.pos);
         }
-
-      request.in_hdr = reinterpret_cast<I2c_in_hdr*>(req.pos);
+      else
+        {
+          // no 3rd part, 2nd part is in_hdr;
+          request.in_hdr = reinterpret_cast<I2c_in_hdr *>(request.buf);
+          request.buf = nullptr;
+          request.buf_len = 0;
+        }
 
       return request;
     }
