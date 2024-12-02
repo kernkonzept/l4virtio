@@ -20,6 +20,9 @@
 #include <l4/re/util/br_manager>
 #include <l4/sys/cxx/ipc_epiface>
 
+#include <vector>
+#include <l4/cxx/pair>
+
 namespace L4virtio {
 namespace Svr {
 
@@ -189,6 +192,10 @@ public:
         if (!init_queue())
           return;
 
+      using Consumed_entry =
+        cxx::Pair<L4virtio::Svr::Virtqueue::Head_desc, l4_uint32_t>;
+      std::vector<Consumed_entry> consumed;
+
       for (;;)
         {
           auto r = get_request();
@@ -215,11 +222,14 @@ public:
                   _fail_next = r.out_hdr.flags.fail_next();
                 }
             }
-          _q->finish(_head, _i2c, r.write_size);
+          consumed.emplace_back(_head, r.write_size);
           if (!init_queue())
             break;
         }
-      return;
+
+      _q->finish(consumed.begin(), consumed.end(), _i2c);
+
+      _head = Virtqueue::Head_desc();
     }
 
   private:
