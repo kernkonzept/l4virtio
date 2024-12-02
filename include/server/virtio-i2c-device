@@ -36,6 +36,8 @@ struct I2c_request_flags
   CXX_BITFIELD_MEMBER(0, 0, fail_next, raw);
   CXX_BITFIELD_MEMBER(1, 1, m_rd, raw);
 };
+static_assert(sizeof(I2c_request_flags) == 4,
+              "I2c_request_flags contains padding bytes.");
 
 struct I2c_out_hdr
 {
@@ -43,11 +45,13 @@ struct I2c_out_hdr
   l4_uint16_t padding;
   I2c_request_flags flags;
 };
+static_assert(sizeof(I2c_out_hdr) == 8, "I2c_out_hdr contains padding bytes.");
 
 struct I2c_in_hdr
 {
   l4_uint8_t status;
 };
+static_assert(sizeof(I2c_in_hdr) == 1, "I2c_in_hdr contains padding bytes.");
 
 struct I2c_req
 {
