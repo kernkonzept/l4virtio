@@ -241,8 +241,7 @@ public:
     CXX_BITFIELD_MEMBER(0,  0, zero_length_request, raw);
   };
 
-  Virtio_i2c(I2c_request_handler *hndlr,
-             L4Re::Util::Registry_server<L4Re::Util::Br_manager_hooks> *server)
+  Virtio_i2c(I2c_request_handler *hndlr, L4Re::Util::Object_registry *registry)
     : L4virtio::Svr::Device(&_dev_config),
       _dev_config(L4VIRTIO_VENDOR_KK, L4VIRTIO_ID_I2C, Num_request_queues),
       _req_handler(hndlr),
@@ -252,7 +251,7 @@ public:
     init_mem_info(2);
     reset_queue_config(0, queue_size);
     setup_queue(&_q, 0, queue_size);
-    server->registry()->register_irq_obj(&_host_irq);
+    registry->register_irq_obj(&_host_irq);
 
     Features hf(0);
     hf.ring_indirect_desc() = true;
