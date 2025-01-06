@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * Copyright (C) 2019, 2022 Kernkonzept GmbH.
+ * Copyright (C) 2019, 2022, 2024 Kernkonzept GmbH.
  * Author(s): Sarah Hoffmann <sarah.hoffmann@kernkonzept.com>
  */
 #pragma once

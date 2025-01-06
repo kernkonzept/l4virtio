@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * Copyright (C) 2022 Kernkonzept GmbH.
+ * Copyright (C) 2022, 2024 Kernkonzept GmbH.
  * Author(s): Stephan Gerhold <stephan.gerhold@kernkonzept.com>
  */
 
