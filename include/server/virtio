@@ -146,6 +146,27 @@ public:
   }
 
   /**
+   * Return unfinished descriptors to the available ring, i.e. reset the local
+   * next index of the available ring to the given descriptor.
+   *
+   * \param  d  descriptor of the request that is to be marked as finished.
+   *
+   * \pre queue must be in working state.
+   *
+   * \pre `d` must be a valid request from this queue, obtained via
+   *      next_avail(), that has not yet been finished, and in addition, no
+   *      descriptors following it have been finished.
+   */
+  void rewind_avail(Head_desc const &d)
+  {
+    unsigned head_idx = d._d - _desc;
+    // Calculate the distance between _current_avail and head_idx, taking into
+    // account that _current_avail might have wrapped around with respect to
+    // _idx_mask in the meantime.
+    _current_avail -= (_current_avail - head_idx) & _idx_mask;
+  }
+
+  /**
    * Test for available descriptors.
    *
    * \return true if there are descriptors available, false if not.
