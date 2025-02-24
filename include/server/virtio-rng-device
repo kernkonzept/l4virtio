@@ -122,8 +122,7 @@ public:
     Data_buffer _req;
   };
 
-  Virtio_rng(Random_state *rnd,
-             L4Re::Util::Registry_server<L4Re::Util::Br_manager_hooks> *server)
+  Virtio_rng(Random_state *rnd, L4::Registry_iface *registry)
     : L4virtio::Svr::Device(&_dev_config),
       _dev_config(L4VIRTIO_VENDOR_KK, L4VIRTIO_ID_RNG, Num_request_queues),
       _rnd(rnd),
@@ -133,7 +132,7 @@ public:
     init_mem_info(2);
     reset_queue_config(0, queue_size);
     setup_queue(&_q, 0, queue_size);
-    server->registry()->register_irq_obj(&_host_irq);
+    registry->register_irq_obj(&_host_irq);
 
     L4virtio::Svr::Dev_config::Features hf;
     hf.ring_indirect_desc() = true;
