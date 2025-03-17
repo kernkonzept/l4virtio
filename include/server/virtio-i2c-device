@@ -229,10 +229,11 @@ public:
           else
             {
               bool ok;
+              l4_uint16_t i2c_addr = r.out_hdr.addr >> 1;
               if (r.out_hdr.flags.m_rd())
-                ok = _req_handler->handle_read(r.buf, r.buf_len);
+                ok = _req_handler->handle_read(i2c_addr, r.buf, r.buf_len);
               else
-                ok = _req_handler->handle_write(r.buf, r.buf_len);
+                ok = _req_handler->handle_write(i2c_addr, r.buf, r.buf_len);
               if (ok)
                 {
                   r.set_status(I2c_msg_ok);
