@@ -241,6 +241,8 @@ struct Block_features : public Dev_config::Features
   CXX_BITFIELD_MEMBER(10, 10, topology, raw);
   /** Device can toggle its cache between writeback and writethrough modes. */
   CXX_BITFIELD_MEMBER(11, 11, config_wce, raw);
+  /** Device supports multiqueue. */
+  CXX_BITFIELD_MEMBER(12, 12, mq, raw);
   /** Device can support discard command. */
   CXX_BITFIELD_MEMBER(13, 13, discard, raw);
   /** Device can support write zeroes command. */
