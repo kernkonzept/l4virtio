@@ -179,6 +179,15 @@ public:
   { return _host_features[idx]; }
 
   /**
+   * Set index of interrupt that driver should trigger for config
+   * notifications.
+   *
+   * See Device_t::device_notify_irq(unsigned).
+   */
+  void set_device_notify_index(unsigned idx)
+  { _config->cfg_device_notify_index = idx; }
+
+  /**
    * Return the number of queues currently usable.
    */
   l4_uint32_t num_queues() const
@@ -340,10 +349,13 @@ public:
    * \param num_max  The maximum number of descriptors supported by this queue.
    * \param inc_generation The config generation will be incremented when
    *                       this is true.
+   * \param device_notify_index Device notification Irq index for this queue.
+   *                            See Device_t::device_notify_irq(unsigned).
    * \return true on success, or false when \a index is out of range.
    */
   bool reset_queue(unsigned index, unsigned num_max,
-                   bool inc_generation = false) const
+                   bool inc_generation = false,
+                   unsigned device_notify_index = 0) const
   {
     l4virtio_config_queue_t volatile *qc;
     // this function is allowed to write to the device config
@@ -354,6 +366,7 @@ public:
     qc->num_max = num_max;
     qc->num = 0;
     qc->ready = 0;
+    qc->device_notify_index = device_notify_index;
     wmb();
     if (inc_generation)
       ++_config->generation;
@@ -993,15 +1006,19 @@ public:
    * \param num_max  Maximum number of entries in this queue.
    * \param inc_generation The config generation will be incremented when
    *                       this is true.
+   * \param device_notify_index Device notification Irq index for this queue.
+   *                            See device_notify_irq(unsigned).
    *
    * This function resets the driver-readable configuration space for the
    * queue with the given index. The queue configuration is reset to all 0,
    * and the maximum number of entries in the queue is set to \a num_max.
    */
   void reset_queue_config(unsigned idx, unsigned num_max,
-                          bool inc_generation = false)
+                          bool inc_generation = false,
+                          unsigned device_notify_index = 0)
   {
-    _device_config->reset_queue(idx, num_max, inc_generation);
+    _device_config->reset_queue(idx, num_max, inc_generation,
+                                device_notify_index);
   }
 
   /**
