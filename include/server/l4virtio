@@ -771,6 +771,12 @@ public:
     *data = ARG(r, desc, p);
   }
 
+  Mem_region       *begin()       { return &_l[0]; }
+  Mem_region const *begin() const { return &_l[0]; }
+
+  Mem_region       *end()       { return &_l[_free]; }
+  Mem_region const *end() const { return &_l[_free]; }
+
 private:
   Mem_region *_find(l4_uint64_t base, l4_umword_t size) const
   {
