@@ -928,8 +928,7 @@ public:
                         l4_addr_t &ds_offset)
   {
     L4Re::Util::Dbg()
-      .printf("register client: host IRQ: %lx config DS: %lx\n",
-              device_notify_irq().cap(), _device_config->ds().cap());
+      .printf("register client: config DS: %lx\n", _device_config->ds().cap());
 
     config_ds = L4::Ipc::make_cap(_device_config->ds(), L4_CAP_FPAGE_RW);
     ds_offset = _device_config->ds_offset();
