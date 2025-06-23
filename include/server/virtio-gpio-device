@@ -1,0 +1,541 @@
+// vi:set ft=cpp: -*- Mode: C++ -*-
+/*
+ * Copyright (C) 2025 Kernkonzept GmbH.
+ * Author(s): Christian Pötzsch <christian.poetzsch@kernkonzept.com>
+ *
+ * License: see LICENSE.spdx (in this directory or the directories above)
+ */
+
+#pragma once
+
+#include <l4/re/error_helper>
+#include <l4/sys/cxx/ipc_epiface>
+
+#include <l4/l4virtio/server/virtio>
+#include <l4/l4virtio/server/l4virtio>
+#include <l4/l4virtio/l4virtio>
+
+#include <l4/re/error_helper>
+#include <l4/re/util/object_registry>
+#include <l4/re/util/br_manager>
+#include <l4/sys/cxx/ipc_epiface>
+#include <l4/cxx/pair>
+
+#include <vector>
+#include <memory>
+
+namespace L4virtio {
+namespace Svr {
+
+/* GPIO message status types */
+enum : l4_uint8_t
+{
+  Gpio_status_ok  = 0x0,
+  Gpio_status_err = 0x1
+};
+
+/* GPIO message types */
+enum : l4_uint8_t
+{
+  Gpio_msg_get_line_names = 0x1,
+  Gpio_msg_get_direction  = 0x2,
+  Gpio_msg_set_direction  = 0x3,
+  Gpio_msg_get_value      = 0x4,
+  Gpio_msg_set_value      = 0x5,
+  Gpio_msg_set_irq_type   = 0x6
+};
+
+/* GPIO value types */
+enum : l4_uint8_t
+{
+  Gpio_low  = 0x0,
+  Gpio_high = 0x1
+};
+
+/* GPIO direction types */
+enum : l4_uint8_t
+{
+  Gpio_direction_none = 0x0,
+  Gpio_direction_out  = 0x1,
+  Gpio_direction_in   = 0x2
+};
+
+/* GPIO interrupt types */
+enum : l4_uint8_t
+{
+  Gpio_irq_type_none         = 0x0,
+  Gpio_irq_type_edge_rising  = 0x1,
+  Gpio_irq_type_edge_falling = 0x2,
+  Gpio_irq_type_edge_both    = 0x3,
+  Gpio_irq_type_level_high   = 0x4,
+  Gpio_irq_type_level_low    = 0x8
+};
+
+/* GPIO interrupt status types */
+enum : l4_uint8_t
+{
+  Gpio_irq_status_invalid = 0x0,
+  Gpio_irq_status_valid   = 0x1
+};
+
+struct Gpio_request
+{
+  l4_uint16_t type;
+  l4_uint16_t gpio;
+  l4_uint32_t value;
+};
+static_assert(sizeof(Gpio_request) == 8,
+              "Gpio_request contains padding bytes.");
+
+struct Gpio_response
+{
+  l4_uint8_t status;
+  l4_uint8_t value;
+};
+static_assert(sizeof(Gpio_response) == 2,
+              "Gpio_response contains padding bytes.");
+
+struct Gpio_irq_request
+{
+  l4_uint16_t gpio;
+};
+static_assert(sizeof(Gpio_irq_request) == 2,
+              "Gpio_irq_request contains padding bytes.");
+
+struct Gpio_irq_response
+{
+  l4_uint8_t status;
+};
+static_assert(sizeof(Gpio_irq_response) == 1,
+              "Gpio_irq_response contains padding bytes.");
+
+struct Gpio_request_msg
+{
+  struct Gpio_request *in_hdr = nullptr;
+  struct Gpio_response *out_hdr = nullptr;
+};
+
+struct Gpio_irq_request_msg
+{
+  struct Gpio_irq_request *in_hdr = nullptr;
+  struct Gpio_irq_response *out_hdr = nullptr;
+};
+
+/**
+ * A server implementation of the virtio-gpio protocol.
+ *
+ * \tparam Request_handler The type that is used to handle incomming requests.
+ *                         Needs to have:
+ *                         - bool get_direction(l4_uint16_t gpio, l4_uint8_t *dir)
+ *                         - bool set_direction(l4_uint16_t gpio, l4_uint8_t dir)
+ *                         - bool get_value(l4_uint16_t gpio, l4_uint8_t *val)
+ *                         - bool set_value(l4_uint16_t gpio, l4_uint8_t val)
+ *                         - bool set_irq_type(l4_uint16_t gpio, l4_uint8_t mode)
+ *                         - bool enable_irq(l4_uint16_t gpio,
+ *                                  std::shared_ptr<Virtio_gpio::Irq_handler> const &hdl)
+ *                         functions.
+ * \tparam Epiface         The Epiface to derive from. Defaults to
+ *                         `L4virtio::Device`.
+ */
+template <typename Request_handler,
+          typename Epiface = L4virtio::Device>
+class Virtio_gpio : public L4virtio::Svr::Device,
+                    public L4::Epiface_t<Virtio_gpio<Request_handler,
+                                                     Epiface>,
+                                         Epiface>
+{
+private:
+  enum
+    {
+      queue_size = 128,
+    };
+
+public:
+  using Gpio_request_handler = Request_handler;
+
+  /**
+   * Handler for an gpio pin irq.
+   *
+   * This notifies the virtio client that an gpio pin irq happened or the
+   * operation was canceled.
+   *
+   * This needs to be called by any server implementation of the Virtio_gpio
+   * class, after an irq was enabled with the enable method of the
+   * Gpio_request_handler.
+   */
+  struct Irq_handler
+  {
+    Irq_handler(Virtio_gpio *gpio, L4virtio::Svr::Virtqueue *q,
+                L4virtio::Svr::Virtqueue::Head_desc const &head,
+                l4_uint8_t *status)
+      : _gpio(gpio), _q(q), _head(head), _status(status)
+    {}
+
+    void handle_irq()
+    {
+      *_status = Gpio_irq_status_valid;
+      _q->finish(_head, _gpio, sizeof(Gpio_irq_response));
+    }
+
+    void cancel()
+    {
+      *_status = Gpio_irq_status_invalid;
+      _q->finish(_head, _gpio, sizeof(Gpio_irq_response));
+    }
+
+  private:
+    Virtio_gpio *_gpio;
+    L4virtio::Svr::Virtqueue *_q;
+    L4virtio::Svr::Virtqueue::Head_desc _head;
+    l4_uint8_t *_status;
+  };
+
+  /**
+   * Handler for the host irq.
+   *
+   * An `L4::Irqep_t` to handle irqs send to the server.
+   */
+  struct Host_irq : L4::Irqep_t<Host_irq>
+  {
+    explicit Host_irq(Virtio_gpio *gpio)
+    : L4::Irqep_t<Host_irq>(), _gpio(gpio) {}
+
+    void handle_irq()
+    { _gpio->handle_queue(); }
+
+  private:
+    Virtio_gpio *_gpio;
+  };
+
+  /**
+   * Generic handler for the Virtio requests
+   */
+  struct Request_processor : L4virtio::Svr::Request_processor
+  {
+    Request_processor(L4virtio::Svr::Virtqueue *q, Gpio_request_handler *hndlr,
+                      Virtio_gpio *gpio)
+      : _q(q), _req_handler(hndlr), _gpio(gpio), _head(), _req()
+    {}
+
+  protected:
+    bool init_queue()
+    {
+      auto r = _q->next_avail();
+
+      if (L4_UNLIKELY(!r))
+        return false;
+
+      _head = start(_gpio->mem_info(), r, &_req);
+
+      return true;
+    }
+
+    /**
+     * The driver prepares the GPIO request in two data parts:
+     * 1st: in_hdr
+     * 2rd: out_hdr
+     *
+     * This parses the two Data_buffers and create the Gpio_* structure.
+     */
+    template <typename T>
+    T get_request()
+    {
+      T req;
+      req.in_hdr = reinterpret_cast<decltype(T::in_hdr)>(_req.pos);
+
+      // Need the next output buffer.
+      if (!next(_gpio->mem_info(), &_req) || !current_flags().write())
+        return req;
+
+      req.out_hdr = reinterpret_cast<decltype(T::out_hdr)>(_req.pos);
+
+      return req;
+    }
+
+    struct Data_buffer : public L4virtio::Svr::Data_buffer
+    {
+      Data_buffer()
+      {
+        pos = nullptr;
+        left = 0;
+      }
+      // This constructor is called from within start, so make it available.
+      Data_buffer(L4virtio::Svr::Driver_mem_region const *r,
+                  L4virtio::Svr::Virtqueue::Desc const &d,
+                  L4virtio::Svr::Request_processor const *)
+      {
+        pos = static_cast<char *>(r->local(d.addr));
+        left = d.len;
+      }
+
+    };
+
+    L4virtio::Svr::Virtqueue *_q;
+    Gpio_request_handler *_req_handler;
+    Virtio_gpio *_gpio;
+    L4virtio::Svr::Virtqueue::Head_desc _head;
+    Data_buffer _req;
+  };
+
+  // Handler for the gpio request queue
+  struct Req_processor : Request_processor
+  {
+    using Request_processor::Request_processor;
+
+    void handle_request()
+    {
+      if (!this->_head)
+        if (!this->init_queue())
+          return;
+
+      using Consumed_entry =
+        cxx::Pair<L4virtio::Svr::Virtqueue::Head_desc, l4_uint32_t>;
+      std::vector<Consumed_entry> consumed;
+
+      for (;;)
+        {
+          Gpio_request_msg req = this->template get_request<Gpio_request_msg>();
+          if (!req.in_hdr || !req.out_hdr)
+            {
+              this->_gpio->device_error();
+              break;
+            }
+
+          // default response is error
+          req.out_hdr->status = Gpio_status_err;
+          switch (req.in_hdr->type)
+            {
+              case Gpio_msg_get_line_names:
+                // we don't support this
+                break;
+              case Gpio_msg_get_direction:
+                {
+                  if (this->_req_handler->get_direction(req.in_hdr->gpio,
+                                                        &req.out_hdr->value))
+                    req.out_hdr->status = Gpio_status_ok;
+                  break;
+                }
+              case Gpio_msg_set_direction:
+                {
+                  if (req.in_hdr->value == Gpio_direction_none ||
+                      req.in_hdr->value == Gpio_direction_out ||
+                      req.in_hdr->value == Gpio_direction_in)
+                  {
+                    if (this->_req_handler->set_direction(req.in_hdr->gpio,
+                                                          req.in_hdr->value))
+                      req.out_hdr->status = Gpio_status_ok;
+                  }
+                  break;
+                }
+              case Gpio_msg_get_value:
+                {
+                  if (this->_req_handler->get_value(req.in_hdr->gpio,
+                                                    &req.out_hdr->value))
+                    req.out_hdr->status = Gpio_status_ok;
+                  break;
+                }
+              case Gpio_msg_set_value:
+                {
+                  if (req.in_hdr->value == Gpio_low ||
+                      req.in_hdr->value == Gpio_high)
+                  {
+                    if (this->_req_handler->set_value(req.in_hdr->gpio,
+                                                      req.in_hdr->value))
+                      req.out_hdr->status = Gpio_status_ok;
+                  }
+                  break;
+                }
+              case Gpio_msg_set_irq_type:
+                {
+                  if (req.in_hdr->value == Gpio_irq_type_none ||
+                      req.in_hdr->value == Gpio_irq_type_edge_rising ||
+                      req.in_hdr->value == Gpio_irq_type_edge_falling ||
+                      req.in_hdr->value == Gpio_irq_type_edge_both ||
+                      req.in_hdr->value == Gpio_irq_type_level_high ||
+                      req.in_hdr->value == Gpio_irq_type_level_low)
+                  {
+                    if (this->_req_handler->set_irq_type(req.in_hdr->gpio,
+                                                         req.in_hdr->value))
+                      req.out_hdr->status = Gpio_status_ok;
+                  }
+                  break;
+                }
+            }
+
+          // Save the descriptors which are done
+          consumed.emplace_back(this->_head, sizeof(Gpio_response));
+
+          if (!this->init_queue())
+            break;
+        }
+
+      // Put all finished descriptors back into the used list and notify the
+      // driver.
+      this->_q->finish(consumed.begin(), consumed.end(), this->_gpio);
+
+      this->_head = Virtqueue::Head_desc();
+    }
+  };
+
+  // Handler for the gpio event queue
+  struct Irq_req_processor : Request_processor
+  {
+    using Request_processor::Request_processor;
+
+    void handle_request()
+    {
+      if (!this->_head)
+        if (!this->init_queue())
+          return;
+
+      for (;;)
+        {
+          // There is only one type of message in the event queue. This
+          // basically arms (unmask) the irq.
+          Gpio_irq_request_msg req = this->template get_request<Gpio_irq_request_msg>();
+          if (!req.in_hdr || !req.out_hdr)
+            {
+              this->_gpio->device_error();
+              break;
+            }
+
+          // Save the virtio descriptor for this event in an extra Irq_handler
+          // object. The descriptor will be returned to the client when the irq
+          // is triggered or canceled.
+          this->_req_handler->enable_irq(req.in_hdr->gpio,
+            std::make_shared<Irq_handler>(this->_gpio,
+                                          this->_q,
+                                          this->_head,
+                                          &req.out_hdr->status));
+
+          if (!this->init_queue())
+            break;
+        }
+
+      this->_head = Virtqueue::Head_desc();
+    }
+  };
+
+  struct Features : public L4virtio::Svr::Dev_config::Features
+  {
+    Features() = default;
+    Features(l4_uint32_t raw) : L4virtio::Svr::Dev_config::Features(raw) {}
+
+    CXX_BITFIELD_MEMBER(0,  0, gpio_f_irq, raw);
+  };
+
+  struct Gpio_config_space
+  {
+    l4_uint16_t ngpio;
+    l4_uint8_t padding[2];
+    l4_uint32_t gpio_names_size;
+  };
+
+  Virtio_gpio(Gpio_request_handler *hndlr,
+              L4Re::Util::Object_registry *registry,
+              l4_uint16_t ngpio)
+    : L4virtio::Svr::Device(&_dev_config),
+      _registry(registry),
+      _dev_config(L4VIRTIO_VENDOR_KK, L4VIRTIO_ID_GPIO, 2),
+      _host_irq(this),
+      _req_processor(&_q[0], hndlr, this),
+      _irq_req_processor(&_q[1], hndlr, this)
+  {
+    init_mem_info(2);
+
+    for (size_t i = 0; i < 2; i++)
+      {
+        reset_queue_config(i, queue_size);
+        setup_queue(&_q[i], i, queue_size);
+      }
+
+    registry->register_irq_obj(&_host_irq);
+
+    Features hf(0);
+    hf.ring_indirect_desc() = true;
+    hf.gpio_f_irq() = true;
+    _dev_config.host_features(0) = hf.raw;
+    _dev_config.set_host_feature(L4VIRTIO_FEATURE_VERSION_1);
+
+    // fill gpio config space
+    _dev_config.priv_config()->ngpio = ngpio;
+    _dev_config.priv_config()->gpio_names_size = 0; // not supported
+
+    _dev_config.reset_hdr();
+  }
+
+  ~Virtio_gpio()
+  { _registry->unregister_obj(&_host_irq); }
+
+  void notify_queue(L4virtio::Svr::Virtqueue *queue)
+  {
+    if (queue->no_notify_guest())
+      return;
+
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_VRING);
+    L4Re::chkipc(_notify_guest_irq->trigger(), "trigger guest irq");
+  }
+
+  void handle_queue()
+  {
+    _req_processor.handle_request();
+    _irq_req_processor.handle_request();
+  }
+
+  void reset() override
+  {}
+
+  bool check_queues() override
+  { return true; }
+
+  int reconfig_queue(unsigned idx) override
+  {
+    if (idx >= sizeof(_q) / sizeof(_q[0]))
+      return -L4_ERANGE;
+
+    return setup_queue(_q + idx, idx, queue_size);
+  }
+
+  void trigger_driver_config_irq() override
+  {
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_CONFIG);
+    _notify_guest_irq->trigger();
+  }
+
+  L4::Ipc_svr::Server_iface *server_iface() const override
+  { return L4::Epiface::server_iface(); }
+
+  long op_set_status(L4virtio::Device::Rights r, unsigned status)
+  { return L4virtio::Svr::Device::op_set_status(r, status); }
+
+  long op_config_queue(L4virtio::Device::Rights r, unsigned queue)
+  { return L4virtio::Svr::Device::op_config_queue(r, queue); }
+
+  long op_device_config(L4virtio::Device::Rights r,
+                        L4::Ipc::Cap<L4Re::Dataspace> &config_ds,
+                        l4_addr_t &ds_offset)
+  { return L4virtio::Svr::Device::op_device_config(r, config_ds, ds_offset); }
+
+  L4::Cap<L4::Irq> device_notify_irq() const override
+  { return L4::cap_cast<L4::Irq>(_host_irq.obj_cap()); }
+
+  void register_single_driver_irq() override
+  {
+    _notify_guest_irq = L4Re::chkcap
+      (server_iface()->template rcv_cap<L4::Irq>(0));
+
+    L4Re::chksys(server_iface()->realloc_rcv_cap(0));
+  }
+
+private:
+  L4Re::Util::Object_registry *_registry;
+  L4virtio::Svr::Dev_config_t<Gpio_config_space> _dev_config;
+  Host_irq _host_irq;
+  L4::Cap<L4::Irq> _notify_guest_irq;
+  L4virtio::Svr::Virtqueue _q[2];
+  Req_processor _req_processor;
+  Irq_req_processor _irq_req_processor;
+};
+
+} // namespace Svr
+} // namespace L4virtio
