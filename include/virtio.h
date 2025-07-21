@@ -81,6 +81,7 @@ enum L4virtio_device_ids
   L4VIRTIO_ID_WATCHDOG      = 35,     /**< Watchdog device */
   L4VIRTIO_ID_CAN           = 36,     /**< CAN device */
   L4VIRTIO_ID_GPIO          = 41,     /**< Gpio device */
+  L4VIRTIO_ID_SPI           = 45,     /**< SPI device */
 
   L4VIRTIO_ID_SOCK          = 0x9999, /**< Unofficial socket device. */
 };

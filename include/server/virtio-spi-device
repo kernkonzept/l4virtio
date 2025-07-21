@@ -1,0 +1,392 @@
+// vi:set ft=cpp: -*- Mode: C++ -*-
+/*
+ * Copyright (C) 2025 Kernkonzept GmbH.
+ * Author(s): Martin Kuettler <martin.kuettler@kernkonzept.com>
+ *            Jakub Jermar <jakub.jermar@kernkonzept.com>
+ *
+ * License: see LICENSE.spdx (in this directory or the directories above)
+ */
+
+#pragma once
+
+#include <l4/re/error_helper>
+#include <l4/sys/cxx/ipc_epiface>
+
+#include <l4/l4virtio/server/virtio>
+#include <l4/l4virtio/server/l4virtio>
+#include <l4/l4virtio/l4virtio>
+
+#include <l4/re/error_helper>
+#include <l4/re/util/object_registry>
+#include <l4/re/util/br_manager>
+#include <l4/sys/cxx/ipc_epiface>
+
+#include <vector>
+#include <l4/cxx/pair>
+
+namespace L4virtio {
+namespace Svr {
+
+struct Spi_config
+{
+  l4_uint8_t cs_max_number;
+  l4_uint8_t cs_change_supported;
+  l4_uint8_t tx_nbits_supported;
+  l4_uint8_t rx_nbits_supported;
+  l4_uint32_t bits_per_word_mask;
+  l4_uint32_t mode_func_supported;
+  l4_uint32_t max_freq_hz;
+  l4_uint32_t max_word_delay_ns;
+  l4_uint32_t max_cs_setup_ns;
+  l4_uint32_t max_cs_hold_ns;
+  l4_uint32_t max_cs_inactive_ns;
+};
+
+enum Spi_transfer_result: l4_uint8_t
+{
+  Spi_trans_ok = 0,
+  Spi_param_err = 1,
+  Spi_trans_err = 2,
+};
+
+struct Spi_transfer_head
+{
+  l4_uint8_t chip_select_id;
+  l4_uint8_t bits_per_word;
+  l4_uint8_t cs_change;
+  l4_uint8_t tx_nbits;
+  l4_uint8_t rx_nbits;
+  l4_uint8_t reserved[3];
+  l4_uint32_t mode;
+  l4_uint32_t freq;
+  l4_uint32_t word_delay_ns;
+  l4_uint32_t cs_setup_ns;
+  l4_uint32_t cs_delay_hold_ns;
+  l4_uint32_t cs_change_delay_inactive_ns;
+};
+static_assert(sizeof(Spi_transfer_head) == 32,
+              "Spi_transfer_head contains padding bytes.");
+
+struct Spi_transfer_req
+{
+  struct Spi_transfer_head head;
+  l4_uint8_t *tx_buf = nullptr;
+  l4_uint8_t *rx_buf = nullptr;
+  Spi_transfer_result *result = nullptr;
+
+  unsigned tx_size = 0;
+  unsigned rx_size = 0;
+
+  void set_result(Spi_transfer_result res)
+  {
+    *result = res;
+  }
+};
+
+/**
+ * A server implementation of the virtio-spi protocol.
+ *
+ * \tparam Spi_request_handler  The type that is used to handle incomming
+ *                              requests. Needs to have:
+ *                              - `handle_transfer(Spi_transfer_head const &,
+ *                                                 l4_uint8_t const *,
+ *                                                 l4_uint8_t *,
+ *                                                 unsigned)`
+ *                              function.
+ * \tparam Epiface              The Epiface to derive from. Defaults to
+ *                              `L4virtio::Device`.
+ */
+template <typename Spi_request_handler, typename Epiface = L4virtio::Device>
+class Virtio_spi
+: public L4virtio::Svr::Device,
+  public L4::Epiface_t<Virtio_spi<Spi_request_handler, Epiface>, Epiface>
+{
+private:
+  enum
+    {
+      Num_request_queues = 1,
+      Queue_size = 128,
+    };
+
+public:
+  /**
+   * Handler for the host IRQ.
+   *
+   * An `L4::Irqep_t` to handle irqs send to the server.
+   */
+  class Host_irq : public L4::Irqep_t<Host_irq>
+  {
+  public:
+    explicit Host_irq(Virtio_spi *spi) : L4::Irqep_t<Host_irq>(), _spi(spi) {}
+
+    void handle_irq()
+    {
+      _spi->handle_queue();
+    }
+
+  private:
+    Virtio_spi *_spi;
+  };
+
+  /**
+   * Handler for the Virtio requests
+   */
+  class Request_processor : public L4virtio::Svr::Request_processor
+  {
+  public:
+
+    struct Data_buffer : public L4virtio::Svr::Data_buffer
+    {
+      Data_buffer()
+      {
+        pos = nullptr;
+        left = 0;
+      }
+      // This constructor is called from within the base start(), so make it
+      // available.
+      Data_buffer(L4virtio::Svr::Driver_mem_region const *r,
+                  L4virtio::Svr::Virtqueue::Desc const &d,
+                  L4virtio::Svr::Request_processor const *)
+      {
+        pos = static_cast<char *>(r->local(d.addr));
+        left = d.len;
+      }
+
+    };
+
+    Request_processor(L4virtio::Svr::Virtqueue *q, Spi_request_handler *hndlr,
+                      Virtio_spi *spi)
+      : _q(q), _req_handler(hndlr), _spi(spi), _head(), _req()
+    {}
+
+    bool init_queue()
+    {
+      auto r = _q->next_avail();
+
+      if (L4_UNLIKELY(!r))
+        return false;
+
+      _head = start(_spi->mem_info(), r, &_req);
+
+      return true;
+    }
+
+    /**
+     * Linux prepares the SPI request in three or four data parts:
+     * 1st: transfer_head
+     * 2nd: TX buffer (not present for RX half-duplex transfers)
+     * 3rd: RX buffer (not present for TX half-duplex transfers)
+     * 4th: transfer result
+     *
+     * This parses the three/four Data_buffers and recreates the
+     * virtio_spi_transfer_req structure.
+     */
+    Spi_transfer_req get_request()
+    {
+      Spi_transfer_req request;
+      memcpy(&request.head, _req.pos, sizeof(Spi_transfer_head));
+
+      // Check for a TX and/or RX buffer
+      if (!next(_spi->mem_info(), &_req))
+        {
+          L4Re::throw_error(-L4_EIO, "Virtio SPI request too short");
+        }
+
+      if (current_flags().write())
+        {
+          // device-writable buffer
+          request.rx_buf = reinterpret_cast<l4_uint8_t *>(_req.pos);
+          request.rx_size = _req.left;
+        }
+      else
+        {
+          request.tx_buf = reinterpret_cast<l4_uint8_t *>(_req.pos);
+          request.tx_size = _req.left;
+        }
+
+      // Check for an RX buffer or request result buffer
+      if (!next(_spi->mem_info(), &_req))
+        {
+          L4Re::throw_error(-L4_EIO, "Virtio SPI request too short");
+        }
+
+      if (has_more())
+        {
+          // This must be the RX buffer
+          if (request.rx_buf || !current_flags().write())
+            {
+              L4Re::throw_error(-L4_EIO, "Bad Virtio SPI request");
+            }
+
+          request.rx_buf = reinterpret_cast<l4_uint8_t *>(_req.pos);
+          request.rx_size = _req.left;
+          next(_spi->mem_info(), &_req);
+        }
+
+      request.result = reinterpret_cast<Spi_transfer_result *>(_req.pos);
+
+      return request;
+    }
+
+    void handle_request()
+    {
+      if (!_head)
+        if (!init_queue())
+          return;
+
+      using Consumed_entry =
+        cxx::Pair<L4virtio::Svr::Virtqueue::Head_desc, l4_uint32_t>;
+      std::vector<Consumed_entry> consumed;
+
+      for (;;)
+        {
+          auto r = get_request();
+          Spi_transfer_result res;
+          if (r.tx_buf && r.rx_buf && (r.tx_size != r.rx_size))
+            res = Spi_param_err;
+          else
+            res =
+              _req_handler->handle_transfer(r.head, r.tx_buf, r.rx_buf,
+                                            r.tx_size ? r.tx_size : r.rx_size);
+          r.set_result(res);
+
+          l4_uint32_t written = sizeof(Spi_transfer_result);
+          if (res == Spi_trans_ok)
+            written += r.rx_size;
+
+          consumed.emplace_back(_head, written);
+          if (!init_queue())
+            break;
+        }
+
+      _q->finish(consumed.begin(), consumed.end(), _spi);
+
+      _head = Virtqueue::Head_desc();
+    }
+
+  private:
+    L4virtio::Svr::Virtqueue *_q;
+    Spi_request_handler *_req_handler;
+    Virtio_spi *_spi;
+    L4virtio::Svr::Virtqueue::Head_desc _head;
+    Data_buffer _req;
+  };
+
+  Virtio_spi(Spi_request_handler *hndlr, L4Re::Util::Object_registry *registry)
+    : L4virtio::Svr::Device(&_dev_config),
+      _dev_config(L4VIRTIO_VENDOR_KK, L4VIRTIO_ID_SPI, Num_request_queues),
+      _req_handler(hndlr),
+      _host_irq(this),
+      _request_processor(&_q, hndlr, this)
+  {
+    init_mem_info(2);
+    reset_queue_config(0, Queue_size);
+    setup_queue(&_q, 0, Queue_size);
+    registry->register_irq_obj(&_host_irq);
+
+    Spi_config volatile *pc = _dev_config.priv_config();
+
+    pc->cs_max_number = hndlr->cs_max_number();
+    pc->cs_change_supported = 0;
+    pc->tx_nbits_supported = 0;
+    pc->rx_nbits_supported = 0;
+    pc->bits_per_word_mask = 0x80;
+    pc->mode_func_supported = hndlr->mode_func_supported();
+    pc->max_freq_hz = 0; // XXX: restrict wrt. controller
+    pc->max_word_delay_ns = 0;
+    pc->max_cs_setup_ns = 0;
+    pc->max_cs_hold_ns = 0;
+    pc->max_cs_inactive_ns = 0;
+
+    L4virtio::Svr::Dev_config::Features hf(0);
+    _dev_config.host_features(0) = hf.raw;
+    _dev_config.set_host_feature(L4VIRTIO_FEATURE_VERSION_1);
+    _dev_config.reset_hdr();
+  }
+
+  void notify_queue(L4virtio::Svr::Virtqueue *)
+  {
+    if (_q.no_notify_guest())
+      return;
+
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_VRING);
+    L4Re::chkipc(_notify_guest_irq->trigger(), "trigger guest irq");
+  }
+
+  void handle_queue()
+  {
+    _request_processor.handle_request();
+  }
+
+  void reset() override
+  {
+  }
+
+  bool check_queues() override
+  {
+    return true;
+  }
+
+  int reconfig_queue(unsigned idx) override
+  {
+    if (idx != 0)
+      return -L4_ERANGE;
+
+    setup_queue(&_q, 0, Queue_size);
+
+    return L4_EOK;
+  }
+
+  void trigger_driver_config_irq() override
+  {
+    _dev_config.add_irq_status(L4VIRTIO_IRQ_STATUS_CONFIG);
+    _notify_guest_irq->trigger();
+  }
+
+  L4::Ipc_svr::Server_iface *server_iface() const override
+  {
+    return L4::Epiface::server_iface();
+  }
+
+  long op_set_status(L4virtio::Device::Rights r, unsigned status)
+  {
+    return L4virtio::Svr::Device::op_set_status(r, status);
+  }
+
+  long op_config_queue(L4virtio::Device::Rights r, unsigned queue)
+  {
+    return L4virtio::Svr::Device::op_config_queue(r, queue);
+  }
+
+  long op_device_config(L4virtio::Device::Rights r,
+                        L4::Ipc::Cap<L4Re::Dataspace> &config_ds,
+                        l4_addr_t &ds_offset)
+  {
+    return L4virtio::Svr::Device::op_device_config(r, config_ds, ds_offset);
+  }
+
+  L4::Cap<L4::Irq> device_notify_irq() const override
+  {
+    return L4::cap_cast<L4::Irq>(_host_irq.obj_cap());
+  }
+
+  void register_single_driver_irq() override
+  {
+    _notify_guest_irq =
+      L4Re::chkcap(server_iface()->template rcv_cap<L4::Irq>(0));
+
+    L4Re::chksys(server_iface()->realloc_rcv_cap(0));
+  }
+
+
+private:
+  L4virtio::Svr::Dev_config_t<Spi_config> _dev_config;
+  Spi_request_handler *_req_handler;
+  L4virtio::Svr::Virtqueue _q;
+  Host_irq _host_irq;
+  L4::Cap<L4::Irq> _notify_guest_irq;
+  Request_processor _request_processor;
+};
+
+} // namespace Svr
+} // namespace L4virtio
