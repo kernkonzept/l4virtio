@@ -213,6 +213,7 @@ protected:
   Virtqueue() = default;
 
   Virtqueue(Virtqueue const &) = delete;
+  ~Virtqueue() = default;
 
 public:
   /**
