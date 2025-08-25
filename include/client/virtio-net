@@ -63,7 +63,9 @@ public:
    * virtqueues for communication and the additional data structures for
    * the network device.
    */
-  void setup_device(L4::Cap<L4virtio::Device> srvcap)
+  void setup_device(L4::Cap<L4virtio::Device> srvcap,
+                    L4::Cap<L4Re::Dataspace>
+                      queue_ds = L4::Cap<L4Re::Dataspace>::Invalid)
   {
     // Contact device.
     driver_connect(srvcap, false);
@@ -86,13 +88,19 @@ public:
     auto txpktoff = rxpktoff + rxqsz * sizeof(Packet);
     auto totalsz = txpktoff + txqsz * sizeof(Packet);
 
-    _queue_ds = L4Re::chkcap(L4Re::Util::make_unique_cap<L4Re::Dataspace>(),
-                             "Allocate queue dataspace capability");
     auto *e = L4Re::Env::env();
-    L4Re::chksys(e->mem_alloc()->alloc(totalsz, _queue_ds.get(),
-                                       L4Re::Mem_alloc::Continuous
-                                       | L4Re::Mem_alloc::Pinned),
-                 "Allocate memory for virtio structures");
+
+    if (queue_ds)
+      _queue_ds = L4Re::Util::Unique_cap<L4Re::Dataspace>(queue_ds);
+    else
+      {
+        _queue_ds = L4Re::chkcap(L4Re::Util::make_unique_cap<L4Re::Dataspace>(),
+                                 "Allocate queue dataspace capability");
+        L4Re::chksys(e->mem_alloc()->alloc(totalsz, _queue_ds.get(),
+                                           L4Re::Mem_alloc::Continuous
+                                           | L4Re::Mem_alloc::Pinned),
+                     "Allocate memory for virtio structures");
+      }
 
     L4Re::chksys(e->rm()->attach(&_queue_region, totalsz,
                                  L4Re::Rm::F::Search_addr | L4Re::Rm::F::RW,
