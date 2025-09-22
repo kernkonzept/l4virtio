@@ -78,6 +78,8 @@ enum L4virtio_device_ids
   L4VIRTIO_ID_FS            = 26,     /**< FS */
   L4VIRTIO_ID_SCMI          = 32,     /**< Scmi device */
   L4VIRTIO_ID_I2C           = 34,     /**< I2C device */
+  L4VIRTIO_ID_WATCHDOG      = 35,     /**< Watchdog device */
+  L4VIRTIO_ID_CAN           = 36,     /**< CAN device */
   L4VIRTIO_ID_GPIO          = 41,     /**< Gpio device */
 
   L4VIRTIO_ID_SOCK          = 0x9999, /**< Unofficial socket device. */
