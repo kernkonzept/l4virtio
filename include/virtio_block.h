@@ -100,4 +100,19 @@ typedef struct l4virtio_block_config_t
   l4_uint8_t unused1[3];
 } l4virtio_block_config_t;
 
+/** Block device feature bits. */
+enum L4virtio_block_feature_bits
+{
+  L4VIRTIO_BLOCK_F_SIZE_MAX = 1,
+  L4VIRTIO_BLOCK_F_SEG_MAX = 2,
+  L4VIRTIO_BLOCK_F_GEOMETRY = 4,
+  L4VIRTIO_BLOCK_F_RO = 5,
+  L4VIRTIO_BLOCK_F_BLK_SIZE = 6,
+  L4VIRTIO_BLOCK_F_FLUSH = 9,
+  L4VIRTIO_BLOCK_F_TOPOLOGY = 10,
+  L4VIRTIO_BLOCK_F_CONFIG_WCE = 11,
+  L4VIRTIO_BLOCK_F_DISCARD = 13,
+  L4VIRTIO_BLOCK_F_WRITE_ZEROES = 14,
+};
+
 /**\}*/
