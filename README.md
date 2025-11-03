@@ -1,23 +1,22 @@
 # L4virtio
 
 This package provides an implementation of the
-[Virtio protocol](https://docs.oasis-open.org/virtio/virtio/v1.0/virtio-v1.0.html)
+[Virtio protocol](https://docs.oasis-open.org/virtio/virtio/)
 for the L4Re operating system. It defines a custom transport protocol
-that is largely compatible with the virtio mmio transport but in addition
-relies on L4 mechanisms for synchronisation.
+that is largely compatible with the virtio mmio transport but builds on
+L4 mechanisms for synchronisation.
 
 # Documentation
 
 This package is part of the L4Re operating system. For documentation and
-build instructions see the
-[L4Re wiki](https://kernkonzept.com/L4Re/guides/l4re).
+build instructions please refer to [l4re.org](https://l4re.org).
 
 # Contributions
 
-We welcome contributions. Please see our contributors guide on
-[how to contribute](https://kernkonzept.com/L4Re/contributing/l4re).
+We welcome contributions. Please see the
+[contributors guide](https://l4re.org/contributing/).
 
 # License
 
-Detailed licensing and copyright information can be found in
-the [LICENSE](LICENSE.spdx) file.
+Detailed licensing and copyright information can be found in the
+[LICENSE](LICENSE.spdx) file.
