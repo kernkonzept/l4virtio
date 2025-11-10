@@ -57,7 +57,11 @@ public:
   /**
    * Establish a connection to the device and set up shared memory.
    *
-   * \param srvcap  IPC capability of the channel to the server.
+   * \param srvcap   IPC capability of the channel to the server.
+   * \param queue_ds (optional) External queue dataspace. If this capability is
+   *                 invalid, the function will attempt to allocate a dataspace
+   *                 on its own. Note that the external queue dataspace must be
+   *                 large enough.
    *
    * This function starts a handshake with the device and sets up the
    * virtqueues for communication and the additional data structures for
