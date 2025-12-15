@@ -898,6 +898,9 @@ public:
 
   virtual L4::Ipc_svr::Server_iface *server_iface() const = 0;
 
+  // Make it possible to react to changes in the list of memory regions
+  virtual void check_mem_list() {};
+
   /**
    * \brief Make a device for the given config.
    */
@@ -1260,6 +1263,8 @@ private:
       L4Re::chksys(validate_ds(ds.get()), "Validating the dataspace.");
 
     check_n_init_shm(cxx::move(ds), base, size, offset);
+
+    check_mem_list();
   }
 
   bool check_features_internal()
