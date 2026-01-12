@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * Copyright (C) 2013-2022, 2024 Kernkonzept GmbH.
+ * Copyright (C) 2013-2022, 2024-2025 Kernkonzept GmbH.
  * Author(s): Alexander Warg <alexander.warg@kernkonzept.com>
  *            Matthias Lange <matthias.lange@kernkonzept.com>
  *
