@@ -56,7 +56,8 @@ struct Spi_transfer_head
   l4_uint8_t cs_change;
   l4_uint8_t tx_nbits;
   l4_uint8_t rx_nbits;
-  l4_uint8_t reserved[3];
+  l4_uint8_t last_request; // XXX non-standard! aka reserved[0]
+  l4_uint8_t reserved[2];
   l4_uint32_t mode;
   l4_uint32_t freq;
   l4_uint32_t word_delay_ns;
