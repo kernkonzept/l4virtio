@@ -21,15 +21,16 @@
 #include <l4/sys/cxx/ipc_epiface>
 
 #include <vector>
+#include <optional>
 #include <l4/cxx/pair>
 
 namespace L4virtio {
 namespace Svr {
 
-enum : l4_uint8_t
+enum class I2c_transfer_result : l4_uint8_t
 {
-  I2c_msg_ok = 0,
-  I2c_msg_err = 1,
+  I2c_msg_ok = 0, ///< The request was processed successfully
+  I2c_msg_err = 1 ///< There was a failure in processing the request
 };
 
 struct I2c_request_flags
@@ -66,9 +67,9 @@ struct I2c_req
 
   unsigned write_size;
 
-  void set_status(l4_uint8_t status)
+  void set_status(I2c_transfer_result status)
   {
-    in_hdr->status = status;
+    in_hdr->status = static_cast<l4_uint8_t>(status);
   }
 };
 
@@ -76,9 +77,10 @@ struct I2c_req
  * A server implementation of the virtio-i2c protocol.
  *
  * \tparam Request_handler  The type that is used to handle incomming requests.
- *                          Needs to have `handle_read(l4_uint8_t *, unsigned)`
- *                          and `handle_write(l4_uint8_t const *, unsigned)`
- *                          functions.
+ *                          Needs to have `T handle_read(l4_uint8_t *,
+ *                          unsigned)` and `T handle_write(l4_uint8_t const *,
+ *                          unsigned)` functions, with T assignable to
+ *                          `std::optional<bool>`.
  * \tparam Epiface          The Epiface to derive from. Defaults to
  *                          `L4virtio::Device`.
  */
@@ -160,6 +162,12 @@ public:
     I2c_req get_request()
     {
       I2c_req request;
+      if (_pending_req.has_value())
+        {
+          request = _pending_req.value();
+          _pending_req.reset();
+          return request;
+        }
 
       auto r = _q->next_avail();
       if (L4_UNLIKELY(!r))
@@ -219,32 +227,41 @@ public:
 
           if (_fail_next)
             {
-              r.set_status(I2c_msg_err);
+              r.set_status(I2c_transfer_result::I2c_msg_err);
               _fail_next = r.out_hdr.flags.fail_next();
             }
           else
             {
-              bool ok;
+              std::optional<bool> ok;
               l4_uint16_t i2c_addr = r.out_hdr.addr >> 1;
               if (r.out_hdr.flags.m_rd())
                 ok = _req_handler->handle_read(i2c_addr, r.buf, r.buf_len);
               else
                 ok = _req_handler->handle_write(i2c_addr, r.buf, r.buf_len);
-              if (ok)
+              if (ok.has_value())
                 {
-                  r.set_status(I2c_msg_ok);
-                  _fail_next = false;
+                  if (ok.value())
+                    {
+                      r.set_status(I2c_transfer_result::I2c_msg_ok);
+                      _fail_next = false;
+                    }
+                  else
+                    {
+                      r.set_status(I2c_transfer_result::I2c_msg_err);
+                      _fail_next = r.out_hdr.flags.fail_next();
+                    }
                 }
               else
                 {
-                  r.set_status(I2c_msg_err);
-                  _fail_next = r.out_hdr.flags.fail_next();
+                  _pending_req = r;
+                  break;
                 }
             }
           consumed.emplace_back(r.head, r.write_size);
         }
 
-      _q->finish(consumed.begin(), consumed.end(), _i2c);
+      if (!consumed.empty())
+        _q->finish(consumed.begin(), consumed.end(), _i2c);
     }
 
   private:
@@ -252,6 +269,7 @@ public:
     I2c_request_handler *_req_handler;
     Virtio_i2c *_i2c;
     bool _fail_next;
+    std::optional<I2c_req> _pending_req;
   };
 
   struct Features : public L4virtio::Svr::Dev_config::Features
