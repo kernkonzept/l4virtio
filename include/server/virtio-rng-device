@@ -106,7 +106,7 @@ public:
       for (;;)
         {
           auto const pos = reinterpret_cast<unsigned char *>(_req.pos);
-          _rnd->get_random(_req.left, pos);
+          L4Re::chksys(_rnd->get_random(_req.left, pos), "get random");
           _q->finish(_head, _rng, _req.left);
           if (!init_queue())
             break;
