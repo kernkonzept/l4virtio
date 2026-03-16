@@ -62,6 +62,7 @@ struct I2c_req
   unsigned buf_len;
   l4_uint8_t* buf;
   struct I2c_in_hdr *in_hdr;
+  L4virtio::Svr::Virtqueue::Head_desc head;
 
   unsigned write_size;
 
@@ -144,21 +145,8 @@ public:
 
     Request_processor(L4virtio::Svr::Virtqueue *q, I2c_request_handler *hndlr,
                       Virtio_i2c *i2c)
-      : _q(q), _req_handler(hndlr), _i2c(i2c), _head(), _req(),
-        _fail_next(false)
+      : _q(q), _req_handler(hndlr), _i2c(i2c), _fail_next(false)
     {}
-
-    bool init_queue()
-    {
-      auto r = _q->next_avail();
-
-      if (L4_UNLIKELY(!r))
-        return false;
-
-      _head = start(_i2c->mem_info(), r, &_req);
-
-      return true;
-    }
 
     /**
      * Linux prepares the I2C request in three data parts:
@@ -172,13 +160,22 @@ public:
     I2c_req get_request()
     {
       I2c_req request;
-      memcpy(&request.out_hdr, _req.pos, sizeof(I2c_out_hdr));
+
+      auto r = _q->next_avail();
+      if (L4_UNLIKELY(!r))
+        {
+          request.head = Virtqueue::Head_desc();
+          return request;
+        }
+
+      Data_buffer req;
+      request.head = start(_i2c->mem_info(), r, &req);
+      memcpy(&request.out_hdr, req.pos, sizeof(I2c_out_hdr));
 
       // number of bytes to be written in the answer.
       request.write_size = sizeof(I2c_in_hdr);
       request.buf_len = 0;
 
-      Data_buffer req;
       // 2nd part: either the optional buffer or the in_hdr
       if (next(_i2c->mem_info(), &req))
         {
@@ -208,12 +205,8 @@ public:
       return request;
     }
 
-    void handle_request()
+    void handle_requests()
     {
-      if (!_head)
-        if (!init_queue())
-          return;
-
       using Consumed_entry =
         cxx::Pair<L4virtio::Svr::Virtqueue::Head_desc, l4_uint32_t>;
       std::vector<Consumed_entry> consumed;
@@ -221,6 +214,9 @@ public:
       for (;;)
         {
           auto r = get_request();
+          if (!r.head)
+            break;
+
           if (_fail_next)
             {
               r.set_status(I2c_msg_err);
@@ -245,22 +241,16 @@ public:
                   _fail_next = r.out_hdr.flags.fail_next();
                 }
             }
-          consumed.emplace_back(_head, r.write_size);
-          if (!init_queue())
-            break;
+          consumed.emplace_back(r.head, r.write_size);
         }
 
       _q->finish(consumed.begin(), consumed.end(), _i2c);
-
-      _head = Virtqueue::Head_desc();
     }
 
   private:
     L4virtio::Svr::Virtqueue *_q;
     I2c_request_handler *_req_handler;
     Virtio_i2c *_i2c;
-    L4virtio::Svr::Virtqueue::Head_desc _head;
-    Data_buffer _req;
     bool _fail_next;
   };
 
@@ -305,7 +295,7 @@ public:
 
   void handle_queue()
   {
-    _request_processor.handle_request();
+    _request_processor.handle_requests();
   }
 
   void reset() override
