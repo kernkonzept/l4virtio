@@ -432,6 +432,7 @@ public:
    */
   bool no_notify_host() const
   {
+    mb(); // All queue updates must be visible before the flag can be read!
     return _used->flags.no_notify();
   }
 
@@ -584,6 +585,9 @@ public:
       throw L4::Bounds_error();
 
     _avail->ring[_avail->idx & _idx_mask] = descno; // _avail->idx expected to wrap
+    // Make the ring entry visible before publishing the new index, so the
+    // device never sees an advanced index pointing at a stale entry. Pairs
+    // with the rmb() on the consuming side.
     wmb();
     ++_avail->idx;
   }
@@ -618,6 +622,12 @@ public:
     if (_current_avail == _used->idx)
       return Eoq;
 
+    // The device writes the used element (id and len) before it advances
+    // _used->idx. Having observed the new idx above, this barrier ensures
+    // we read the matching ring entry only afterwards and thus see the
+    // device's writes, not stale contents. Pairs with the wmb() the device
+    // side issues before publishing the index.
+    rmb();
     auto elem = _used->ring[_current_avail++ & _idx_mask];
 
     if (len)
