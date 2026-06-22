@@ -242,7 +242,13 @@ public:
     desc.addr = addr;
     desc.len = size;
     desc.flags.raw = 0;
-    if (_headers[handle.head].type > 0) // write or flush request
+    /* A data buffer is device-writable exactly when the device writes into it:
+     * read (T_IN) and get-id requests. For write/flush/discard the device
+     * reads the buffer, so it stays device-readable. Strict virtio transports
+     * (e.g. a real virtio-blk device) honour this flag; L4virtio device
+     * backends key off the request type instead. */
+    auto type = _headers[handle.head].type;
+    if (type == L4VIRTIO_BLOCK_T_IN || type == L4VIRTIO_BLOCK_T_GET_ID)
       desc.flags.write() = true;
 
     req.tail = descno;
