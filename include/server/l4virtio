@@ -829,6 +829,12 @@ private:
   /// Flag for trusted ds validation.
   bool _trusted_ds_validation_enabled = false;
 
+  /// For informational output, useful to read for the user.
+  L4Re::Util::Dbg _msg_user;
+
+  /// For debugging output (more verbose), useful for the developer.
+  L4Re::Util::Dbg _msg_dev;
+
 public:
   L4_RPC_LEGACY_DISPATCH(L4virtio::Device);
   template<typename IOS> int virtio_dispatch(unsigned r, IOS &ios)
@@ -902,10 +908,18 @@ public:
   virtual void check_mem_list() {};
 
   /**
-   * \brief Make a device for the given config.
+   * Make a device for the given config.
+   *
+   * \param dev_config  The given configuration.
+   * \param msg_user    Debug channel for informational messages relevant for
+   *                    the user. Verbosity of L4Re::Util::Dbg() by default.
+   * \param msg_dev     Debug channel for debugging messages relevant for the
+   *                    developer. Verbosity of L4Re::Util::Dbg(2) by default.
    */
-  Device_t(Dev_config *dev_config)
-  : _device_config(dev_config)
+  Device_t(Dev_config *dev_config,
+           L4Re::Util::Dbg msg_user = L4Re::Util::Dbg{},
+           L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
+  : _device_config(dev_config), _msg_user(msg_user), _msg_dev(msg_dev)
   {}
 
   /**
@@ -930,7 +944,7 @@ public:
                       L4::Ipc::Snd_fpage ds_cap_fp, l4_uint64_t ds_base,
                       l4_umword_t offset, l4_umword_t sz)
   {
-    L4Re::Util::Dbg()
+    _msg_dev
       .printf("Registering dataspace from 0x%llx with %lu KiB, offset 0x%lx\n",
               ds_base, sz >> 10, offset);
 
@@ -943,7 +957,7 @@ public:
                         L4::Ipc::Cap<L4Re::Dataspace> &config_ds,
                         l4_addr_t &ds_offset)
   {
-    L4Re::Util::Dbg()
+    _msg_dev
       .printf("register client: config DS: %lx\n", _device_config->ds().cap());
 
     config_ds = L4::Ipc::make_cap(_device_config->ds(), L4_CAP_FPAGE_RW);
@@ -1114,7 +1128,7 @@ public:
     if (L4_UNLIKELY(!used_info || !used_info->is_writable()))
       return false;
 
-    L4Re::Util::Dbg()
+    _msg_dev
       .printf("shm=[%llx-%llx] local=[%lx-%lx] desc=[%llx-%llx] (%p-%p)\n",
               desc_info->drv_base(), desc_info->drv_base() + desc_info->size() - 1,
               desc_info->local_base(),
@@ -1123,7 +1137,7 @@ public:
               desc_info->local(Ptr<char>(desc)),
               desc_info->local(Ptr<char>(desc)) + Virtqueue::desc_size(num));
 
-    L4Re::Util::Dbg()
+    _msg_dev
       .printf("shm=[%llx-%llx] local=[%lx-%lx] avail=[%llx-%llx] (%p-%p)\n",
               avail_info->drv_base(), avail_info->drv_base() + avail_info->size() - 1,
               avail_info->local_base(),
@@ -1132,7 +1146,7 @@ public:
               avail_info->local(Ptr<char>(avail)),
               avail_info->local(Ptr<char>(avail)) + Virtqueue::avail_size(num));
 
-    L4Re::Util::Dbg()
+    _msg_dev
       .printf("shm=[%llx-%llx] local=[%lx-%lx] used=[%llx-%llx] (%p-%p)\n",
               used_info->drv_base(), used_info->drv_base() + used_info->size() - 1,
               used_info->local_base(),
@@ -1154,7 +1168,7 @@ public:
       L4Re::chksys(-L4_ENOMEM);
 
     auto const *i = _mem_info.add(base, size, offset, cxx::move(shm));
-    L4Re::Util::Dbg()
+    _msg_dev
       .printf("PORT[%p]: DMA guest [%llx-%llx]  local [%lx-%lx]  offset %lx\n",
               this, i->drv_base(), i->drv_base() + i->size() - 1,
               i->local_base(),
@@ -1388,7 +1402,7 @@ private:
   {
     if (new_status == 0)
       {
-        L4Re::Util::Dbg().printf("Resetting device\n");
+        _msg_user.printf("Resetting device\n");
         reset();
         _device_config->reset_hdr(true);
       }
