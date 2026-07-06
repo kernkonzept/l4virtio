@@ -79,6 +79,8 @@ public:
    *                           queue dataspace must be large enough.
    * \param fmask0             Feature bits 0..31 that the driver supports.
    * \param fmask1             Feature bits 32..63 that the driver supports.
+   * \param msg_dev            Debug channel for developer-related information.
+   *                           Verbosity of L4Re::Util::Dbg(2) by default.
    *
    * This function starts a handshake with the device and sets up the
    * virtqueues for communication and the additional data structures for
@@ -92,7 +94,8 @@ public:
   void setup_device(L4::Cap<L4virtio::Device> srvcap, l4_size_t usermem,
                     void **userdata, Ptr<void> &user_devaddr,
                     L4::Cap<L4Re::Dataspace> qds = L4::Cap<L4Re::Dataspace>(),
-                    l4_uint32_t fmask0 = -1U, l4_uint32_t fmask1 = -1U)
+                    l4_uint32_t fmask0 = -1U, l4_uint32_t fmask1 = -1U,
+                    L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
   {
     // Contact device.
     driver_connect(srvcap);
@@ -147,7 +150,7 @@ public:
     L4Re::chksys(register_ds(_queue_ds, 0, totalsz, &devaddr),
                  "Register queue dataspace with device");
 
-    _queue.init_queue(queuesz, _queue_region.get());
+    _queue.init_queue(queuesz, _queue_region.get(), msg_dev);
 
     config_queue(0, queuesz, devaddr, devaddr + _queue.avail_offset(),
                  devaddr + _queue.used_offset());

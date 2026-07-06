@@ -62,6 +62,8 @@ public:
    *                 invalid, the function will attempt to allocate a dataspace
    *                 on its own. Note that the external queue dataspace must be
    *                 large enough.
+   * \param msg_dev  Debug channel for developer-related information.
+   *                 Verbosity of L4Re::Util::Dbg(2) by default.
    *
    * This function starts a handshake with the device and sets up the
    * virtqueues for communication and the additional data structures for
@@ -69,7 +71,9 @@ public:
    */
   void setup_device(L4::Cap<L4virtio::Device> srvcap,
                     L4::Cap<L4Re::Dataspace>
-                      queue_ds = L4::Cap<L4Re::Dataspace>::Invalid)
+                      queue_ds = L4::Cap<L4Re::Dataspace>::Invalid,
+                    L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
+
   {
     // Contact device.
     driver_connect(srvcap, false);
@@ -116,8 +120,8 @@ public:
     L4Re::chksys(register_ds(_queue_ds.get(), 0, totalsz, &devaddr),
                  "Register queue dataspace with device");
 
-    _rxq.init_queue(rxqsz, _queue_region.get() + rxqoff);
-    _txq.init_queue(txqsz, _queue_region.get() + txqoff);
+    _rxq.init_queue(rxqsz, _queue_region.get() + rxqoff, msg_dev);
+    _txq.init_queue(txqsz, _queue_region.get() + txqoff, msg_dev);
 
     config_queue(0, rxqsz, devaddr + rxqoff,
                  devaddr + rxqoff + _rxq.avail_offset(),
