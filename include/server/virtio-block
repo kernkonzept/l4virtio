@@ -440,10 +440,15 @@ public:
    * \param queue_size Number of entries to provide in avail and used queue.
    * \param capacity   Size of the device in 512-byte sectors.
    * \param read_only  True, if the device should not be writable.
+   * \param msg_user   Debug channel for informational messages relevant for
+   *                   the user. Verbosity of L4Re::Util::Dbg() by default.
+   * \param msg_dev    Debug channel for debugging messages relevant for the
+   *                   developer. Verbosity of L4Re::Util::Dbg(2) by default.
    */
   Block_dev_base(l4_uint32_t vendor, unsigned queue_size, l4_uint64_t capacity,
-                 bool read_only)
-  : L4virtio::Svr::Device_t<Ds_data>(&_dev_config),
+                 bool read_only, L4Re::Util::Dbg msg_user = L4Re::Util::Dbg{},
+                 L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
+  : L4virtio::Svr::Device_t<Ds_data>(&_dev_config, msg_user, msg_dev),
     _vq_max(queue_size),
     _dev_config(vendor, L4VIRTIO_ID_BLOCK, 1)
   {
@@ -611,8 +616,10 @@ protected:
 
 public:
   Block_dev(l4_uint32_t vendor, unsigned queue_size, l4_uint64_t capacity,
-            bool read_only)
-  : Block_dev_base<Ds_data>(vendor, queue_size, capacity, read_only),
+            bool read_only, L4Re::Util::Dbg msg_user = L4Re::Util::Dbg{},
+            L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
+  : Block_dev_base<Ds_data>(vendor, queue_size, capacity, read_only,
+                            msg_user, msg_dev),
     _irq_handler(this)
   {}
 
