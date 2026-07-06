@@ -203,6 +203,29 @@ public:
   }
 
   /**
+   * Poll if a network packet has been received from the device and return
+   * the descriptor number, if any.
+   *
+   * \param[out] len  (optional) Length of valid data in RX packet.
+   *
+   * \retval !=Virtqueue::Eoq  Descriptor number of received packet
+   * \retval ==Virtqueue::Eoq  No descriptor is available.
+   *
+   * The packet data can be obtained with rx_pkt(). finish_rx() should be
+   * called after the packet buffer can be returned to the RX queue.
+   */
+  l4_uint16_t poll_rx(l4_uint32_t *len = nullptr)
+  {
+    l4_uint16_t descno = _rxq.find_next_used(len);
+
+    if (len && descno != Virtqueue::Eoq)
+      // Ensure that the length provided by the device in wait_for_next_used()
+      // is not larger than the buffer and subtract the length of the header.
+      *len = cxx::min(*len - sizeof(_rxpkts[0].hdr), sizeof(_rxpkts[0].data));
+    return descno;
+  }
+
+  /**
    * Block until a network packet has been received from the device and return
    * the descriptor number.
    *
@@ -223,17 +246,13 @@ public:
     // Wait until used descriptor becomes available.
     for (;;)
       {
-        descno = _rxq.find_next_used(len);
+        descno = poll_rx(len);
         if (descno != Virtqueue::Eoq)
           break;
 
         L4Re::chksys(_driver_notification_irq->receive(), "Wait for RX");
       }
 
-    if (len)
-      // Ensure that the length provided by the device in wait_for_next_used()
-      // is not larger than the buffer and subtract the length of the header.
-      *len = cxx::min(*len - sizeof(_rxpkts[0].hdr), sizeof(_rxpkts[0].data));
     return descno;
   }
 
