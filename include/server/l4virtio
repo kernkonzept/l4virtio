@@ -1158,6 +1158,9 @@ public:
     q->setup(num, desc_info->local(Ptr<void>(desc)),
              avail_info->local(Ptr<void>(avail)),
              used_info->local(Ptr<void>(used)));
+
+    _msg_user.printf("New client connection successfully established.\n");
+
     return true;
   }
 
