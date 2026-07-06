@@ -184,6 +184,12 @@ public:
   }
 
   /**
+   * Get notification IRQ.
+   */
+  L4::Cap<L4::Irq> get_rx_notification_irq() const
+  { return _driver_notification_irq.get(); }
+
+  /**
    * Return a reference to the RX packet buffer of the specified descriptor,
    * e.g. from wait_rx().
    *
