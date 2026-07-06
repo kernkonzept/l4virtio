@@ -118,13 +118,15 @@ public:
 
     /**
      * Dump a single descriptor.
+     *
+     * \param idx  Descriptor index.
+     * \param dbg  Debug channel for printing the information.
+     *             Verbosity of L4Re::Util::Dbg() by default.
      */
-    void dump(unsigned idx) const
+    void dump(unsigned idx, L4Re::Util::Dbg dbg = L4Re::Util::Dbg{}) const
     {
-      L4Re::Util::Dbg().printf("D[%04x]: %08llx (%x) f=%04x n=%04x\n",
-                               idx, addr.get(),
-                               len, static_cast<unsigned>(flags.raw),
-                               static_cast<unsigned>(next));
+      dbg.printf("D[%04x]: %08llx (%x) f=%04x n=%04x\n",
+                 idx, addr.get(), len, flags.raw, next);
     }
   };
 
@@ -338,21 +340,24 @@ public:
   /**
    * Enable this queue.
    *
-   * \param num    The number of entries in the descriptor table, the
-   *               available ring, and the used ring (must be a power of 2).
-   * \param desc   The address of the descriptor table. (Must be
-   *               Desc_align aligned and at least `desc_size(num)` bytes
-   *               in size.)
-   * \param avail  The address of the available ring. (Must be
-   *               Avail_align aligned and at least `avail_size(num)` bytes
-   *               in size.)
-   * \param used   The address of the used ring. (Must be Used_align aligned
-   *               and at least `used_size(num)` bytes in size.)
+   * \param num      The number of entries in the descriptor table, the
+   *                 available ring, and the used ring (must be a power of 2).
+   * \param desc     The address of the descriptor table. (Must be
+   *                 Desc_align aligned and at least `desc_size(num)` bytes
+   *                 in size.)
+   * \param avail    The address of the available ring. (Must be
+   *                 Avail_align aligned and at least `avail_size(num)` bytes
+   *                 in size.)
+   * \param used     The address of the used ring. (Must be Used_align aligned
+   *                 and at least `used_size(num)` bytes in size.)
+   * \param msg_dev  Debug channel for developer-related information.
+   *                 Verbosity of L4Re::Util::Dbg(2) by default.
    *
    * Due to the data type of the descriptors, the queue can have a
    * maximum size of 2^16.
    */
-  void setup(unsigned num, void *desc, void *avail, void *used)
+  void setup(unsigned num, void *desc, void *avail, void *used,
+             L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
   {
     if (num > 0x10000)
       throw L4::Runtime_error(-L4_EINVAL, "Queue too large.");
@@ -364,39 +369,45 @@ public:
 
     _current_avail = 0;
 
-    L4Re::Util::Dbg().printf("VQ[%p]: num=%d d:%p a:%p u:%p\n",
-                             this, num, _desc, _avail, _used);
+    msg_dev.printf("VQ[%p]: num=%d d:%p a:%p u:%p\n",
+                   this, num, _desc, _avail, _used);
   }
 
   /**
    * Enable this queue.
    *
-   * \param num    The number of entries in the descriptor table, the
-   *               available ring, and the used ring (must be a power of 2).
-   * \param ring   The base address for the queue data structure. The memory
-   *               block at `ring` must be at least `total_size(num)` bytes
-   *               in size and have an alignment of Desc_align
-   *               (desc_align()) bits.
+   * \param num      The number of entries in the descriptor table, the
+   *                 available ring, and the used ring (must be a power of 2).
+   * \param ring     The base address for the queue data structure. The memory
+   *                 block at `ring` must be at least `total_size(num)` bytes
+   *                 in size and have an alignment of Desc_align
+   *                 (desc_align()) bits.
+   * \param msg_dev  Debug channel for developer-related information.
+   *                 Verbosity of L4Re::Util::Dbg(2) by default.
    *
    * Due to the data type of the descriptors, the queue can have a
    * maximum size of 2^16.
    */
-  void setup_simple(unsigned num, void *ring)
+  void setup_simple(unsigned num, void *ring,
+                    L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
   {
     l4_addr_t desc = reinterpret_cast<l4_addr_t>(ring);
     l4_addr_t avail = l4_round_size(desc + desc_size(num), Avail_align);
     void *used = reinterpret_cast<void *>(
       l4_round_size(avail + avail_size(num), Used_align));
-    setup(num, ring, reinterpret_cast<void *>(avail), used);
+    setup(num, ring, reinterpret_cast<void *>(avail), used, msg_dev);
   }
 
   /**
-   * Dump descriptors for this queue.
+   * Dump a descriptor for this queue.
+   *
+   * \param d    Descriptor pointer.
+   * \param dbg  Debug channel for printing the information.
    *
    * \pre the queue must be in working state.
    */
-  void dump(Desc const *d) const
-  { d->dump(d - _desc); }
+  void dump(Desc const *d, L4Re::Util::Dbg dbg = L4Re::Util::Dbg{}) const
+  { d->dump(d - _desc, dbg); }
 
   /**
    * Test if this queue is in working state.
@@ -514,37 +525,43 @@ public:
   /**
    * Initialize this virtqueue.
    *
-   * \param num    The number of entries in the descriptor table, the
-   *               available ring, and the used ring (must be a power of 2).
-   * \param desc   The address of the descriptor table. (Must be
-   *               Desc_align aligned and at least `desc_size(num)` bytes
-   *               in size.)
-   * \param avail  The address of the available ring. (Must be
-   *               Avail_align aligned and at least `avail_size(num)` bytes
-   *               in size.)
-   * \param used   The address of the used ring. (Must be Used_align aligned
-   *               and at least `used_size(num)` bytes in size.)
+   * \param num      The number of entries in the descriptor table, the
+   *                 available ring, and the used ring (must be a power of 2).
+   * \param desc     The address of the descriptor table. (Must be
+   *                 Desc_align aligned and at least `desc_size(num)` bytes
+   *                 in size.)
+   * \param avail    The address of the available ring. (Must be
+   *                 Avail_align aligned and at least `avail_size(num)` bytes
+   *                 in size.)
+   * \param used     The address of the used ring. (Must be Used_align aligned
+   *                 and at least `used_size(num)` bytes in size.)
+   * \param msg_dev  Debug channel for developer-related information.
+   *                 Verbosity of L4Re::Util::Dbg(2) by default.
    *
    * This function sets up the memory and initializes the freelist.
    */
-  void init_queue(unsigned num, void *desc, void *avail, void *used)
+  void init_queue(unsigned num, void *desc, void *avail, void *used,
+                  L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
   {
-    setup(num, desc, avail, used);
+    setup(num, desc, avail, used, msg_dev);
     initialize_rings(num);
   }
 
   /**
    * Initialize this virtqueue.
    *
-   * \param num    The number of entries in the descriptor table, the
-   *               available ring, and the used ring (must be a power of 2).
-   * \param base   The base address for the queue data structure.
+   * \param num      The number of entries in the descriptor table, the
+   *                 available ring, and the used ring (must be a power of 2).
+   * \param base     The base address for the queue data structure.
+   * \param msg_dev  Debug channel for developer-related information.
+   *                 Verbosity of L4Re::Util::Dbg(2) by default.
    *
    * This function sets up the memory and initializes the freelist.
    */
-  void init_queue(unsigned num, void *base)
+  void init_queue(unsigned num, void *base,
+                  L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
   {
-    setup_simple(num, base);
+    setup_simple(num, base, msg_dev);
     initialize_rings(num);
   }
 
