@@ -711,7 +711,7 @@ public:
 
     unsigned idx = r - &_l[0];
 
-    for (unsigned i = idx + 1; i < _free - 1; ++i)
+    for (unsigned i = idx; i < _free - 1; ++i)
       _l[i] = cxx::move(_l[i + 1]);
 
     _l[--_free] = Mem_region();
