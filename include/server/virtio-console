@@ -577,9 +577,11 @@ public:
               {
                 if (msg.value)
                   _ctrl_port.status = Port::Port_open;
+                process_device_ready(msg.value);
               }
+            else
+              ret = -L4_EIO;
 
-            process_device_ready(msg.value);
             continue;
           }
 
