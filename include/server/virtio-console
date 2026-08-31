@@ -149,6 +149,8 @@ struct Port
   /// Reset the port to the initial state and disable its virtqueues.
   virtual void reset()
   {
+    tx.disable();
+    rx.disable();
     status = Port_disabled;
     reported_status = Port_disabled;
   }
