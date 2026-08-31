@@ -348,7 +348,7 @@ protected:
    */
   void set_topology(l4_uint8_t physical_block_exp,
                     l4_uint8_t alignment_offset,
-                    l4_uint32_t min_io_size,
+                    l4_uint16_t min_io_size,
                     l4_uint32_t opt_io_size)
   {
     l4virtio_block_config_t volatile *pc = _dev_config.priv_config();
