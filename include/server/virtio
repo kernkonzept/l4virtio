@@ -480,6 +480,8 @@ private:
 
   /// number of entries in the current descriptor table (_table)
   l4_uint16_t _num;
+  /// number of descriptors that may still be added to the current chain
+  l4_uint16_t _left;
 
 public:
   /**
@@ -516,6 +518,8 @@ public:
         _table = ring->desc(0);
         _num = ring->num();
       }
+
+    _left = _num;
 
     dm->load_desc(_current, this, cxx::forward<ARGS>(args)...);
   }
@@ -564,7 +568,8 @@ public:
    * \retval true   A next descriptor is available.
    * \retval false  No descriptor available.
    *
-   * \throws Bad_descriptor  The `next` index of this descriptor is invalid.
+   * \throws Bad_descriptor  The `next` index of this descriptor is invalid or
+   *                         the chain is longer than the descriptor table.
    */
   template<typename DESC_MAN, typename ...ARGS>
   bool next(DESC_MAN *dm, ARGS... args)
@@ -574,6 +579,11 @@ public:
 
     if (L4_UNLIKELY(_current.next >= _num))
       throw Bad_descriptor(this, Bad_descriptor::Bad_next);
+
+    if (L4_UNLIKELY(_left == 0))
+      throw Bad_descriptor(this, Bad_descriptor::Bad_next);
+
+    --_left;
 
     _current = cxx::access_once(_table + _current.next);
 
