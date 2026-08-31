@@ -71,6 +71,13 @@ private:
   static l4_uint32_t align(l4_uint32_t x)
   { return (x + 0xfU) & ~0xfU; }
 
+  static void check_cfg_size(unsigned cfg_size)
+  {
+    if (cfg_size > L4_PAGESIZE - 0x100)
+      L4Re::chksys(-L4_EINVAL,
+                   "Device configuration fits into the config page");
+  }
+
   void attach_n_init_cfg(Cfg_cap const &cfg, l4_addr_t offset)
   {
     L4Re::chksys(L4Re::Env::env()->rm()->attach(&_config, L4_PAGESIZE,
@@ -119,6 +126,8 @@ public:
     using L4Re::chkcap;
     using L4Re::chksys;
 
+    check_cfg_size(cfg_size);
+
     if (sizeof(l4virtio_config_queue_t) * _nqueues + _qoffset > L4_PAGESIZE)
       {
         // too many queues does not fit into our page
@@ -150,6 +159,8 @@ public:
     _qoffset(0x100 + align(cfg_size)),
     _nqueues(num_queues)
   {
+    check_cfg_size(cfg_size);
+
     if (sizeof(l4virtio_config_queue_t) * _nqueues + _qoffset > L4_PAGESIZE)
       {
         // too many queues does not fit into our page
