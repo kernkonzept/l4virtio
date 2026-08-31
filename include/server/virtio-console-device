@@ -356,6 +356,7 @@ public:
           break;
 
         l4_uint32_t chunk = 0;
+        bool failed = false;
         try
           {
             Device_port::Buffer dst;
@@ -372,11 +373,17 @@ public:
           }
         catch (Bad_descriptor const &)
           {
-            device_error();
+            failed = true;
           }
 
         q->finish(r, this, chunk);
         total += chunk;
+
+        if (failed)
+          {
+            device_error();
+            break;
+          }
       }
 
     if (total < len)
