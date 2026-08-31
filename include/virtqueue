@@ -359,6 +359,8 @@ public:
   void setup(unsigned num, void *desc, void *avail, void *used,
              L4Re::Util::Dbg msg_dev = L4Re::Util::Dbg{2})
   {
+    if (num == 0 || (num & (num - 1)))
+      throw L4::Runtime_error(-L4_EINVAL, "Queue size is not a power of two.");
     if (num > 0x10000)
       throw L4::Runtime_error(-L4_EINVAL, "Queue too large.");
 
