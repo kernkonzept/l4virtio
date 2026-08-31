@@ -64,13 +64,14 @@ public:
   {
     Request_processor rp;
     Data_block data;
-
-    rp.start(_mem_list, _request, &data);
-
-    unsigned total = data.len;
+    unsigned total;
 
     try
       {
+        rp.start(_mem_list, _request, &data);
+
+        total = data.len;
+
         while (rp.has_more())
           {
             rp.next(_mem_list, &data);
