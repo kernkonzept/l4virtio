@@ -588,7 +588,7 @@ public:
 
         // Ignore invalid port ids
         if (msg.id >= max_ports())
-          break;
+          continue;
 
         switch (msg.event)
           {
