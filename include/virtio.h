@@ -97,6 +97,11 @@ enum L4virtio_device_status
   L4VIRTIO_STATUS_FAILED      = 0x80 /**< Driver detected fatal error. */
 };
 
+enum
+{
+  L4VIRTIO_FEATURES_MAP_WORDS = 6
+};
+
 /** L4virtio-specific feature bits. */
 enum L4virtio_feature_bits
 {
@@ -197,9 +202,9 @@ typedef struct l4virtio_config_hdr_t
   l4_uint64_t shm_base;
 
   /* L4Virtio(0xc0): use the unused space here for device and driver feature bitmaps */
-  l4_uint32_t dev_features_map[6];
+  l4_uint32_t dev_features_map[L4VIRTIO_FEATURES_MAP_WORDS];
   l4_uint32_t _res11[2];
-  l4_uint32_t driver_features_map[6];
+  l4_uint32_t driver_features_map[L4VIRTIO_FEATURES_MAP_WORDS];
   l4_uint32_t _res12[1];
 
   /* Virtio(0xfc): config generation */
@@ -276,7 +281,7 @@ l4virtio_set_feature(l4_uint32_t *feature_map, unsigned feat)
 {
   unsigned idx = feat / 32;
 
-  if (idx < 8)
+  if (idx < L4VIRTIO_FEATURES_MAP_WORDS)
     feature_map[idx] |= 1UL << (feat % 32);
 }
 
@@ -288,7 +293,7 @@ l4virtio_clear_feature(l4_uint32_t *feature_map, unsigned feat)
 {
   unsigned idx = feat / 32;
 
-  if (idx < 8)
+  if (idx < L4VIRTIO_FEATURES_MAP_WORDS)
     feature_map[idx] &= ~(1UL << (feat % 32));
 }
 
@@ -300,7 +305,7 @@ l4virtio_get_feature(l4_uint32_t *feature_map, unsigned feat)
 {
   unsigned idx = feat / 32;
 
-  if (idx >= 8)
+  if (idx >= L4VIRTIO_FEATURES_MAP_WORDS)
     return 0;
 
   return feature_map[idx] & (1UL << (feat % 32));
