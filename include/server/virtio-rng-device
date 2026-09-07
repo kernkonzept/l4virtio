@@ -29,9 +29,9 @@ namespace Svr {
  *                    as I do not have a test case.
  * \tparam Epiface    The Epiface to derive from. Defaults to `L4virtio::Device`.
  */
-  template <typename Rnd_state, typename Epiface = L4virtio::Device>
+template <typename Rnd_state, typename Epiface = L4virtio::Device>
 class Virtio_rng : public L4virtio::Svr::Device,
-                   public L4::Epiface_t<Virtio_rng<Rnd_state>, Epiface>
+                   public L4::Epiface_t<Virtio_rng<Rnd_state, Epiface>, Epiface>
 {
 private:
   enum
