@@ -270,7 +270,7 @@ public:
     if (index != 0)
       return -L4_EEXIST;
 
-    return l4_ipc_error(_driver_notification->down(), l4_utcb());
+    return l4_error(_driver_notification->down());
   }
 
   /**
