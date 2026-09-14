@@ -433,7 +433,10 @@ private:
     if (idx >= sizeof(_q) / sizeof(_q[0]))
       return -L4_ERANGE;
 
-    return setup_queue(_q + idx, idx, Queue_size);
+    if (!setup_queue(_q + idx, idx, Queue_size))
+      return -L4_EINVAL;
+
+    return L4_EOK;
   }
 
   void trigger_driver_config_irq() override

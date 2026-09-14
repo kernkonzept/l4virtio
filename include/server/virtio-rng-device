@@ -169,7 +169,8 @@ public:
     if (idx != 0)
       return -L4_ERANGE;
 
-    setup_queue(&_q, 0, queue_size);
+    if (!setup_queue(&_q, 0, queue_size))
+      return -L4_EINVAL;
 
     return L4_EOK;
   }
