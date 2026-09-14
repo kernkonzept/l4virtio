@@ -220,6 +220,9 @@ struct Queue_worker : Request_processor
 
   l4_ssize_t handle_request()
   {
+    if (!q->ready())
+      return 0;
+
     try
       {
         if (!head && L4_UNLIKELY(!init_queue()))
@@ -425,6 +428,10 @@ private:
 
   bool check_queues() override
   {
+    for (Virtqueue &q : _q)
+      if (!q.ready())
+        return false;
+
     return true;
   }
 
