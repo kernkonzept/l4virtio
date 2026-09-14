@@ -189,8 +189,8 @@ struct Queue_worker : Request_processor
     for (;;)
       {
         chunk += req.copy_to(buf);
-        if (req.done())
-          next();
+        if (req.done() && !next())
+          break;
         if (!buf->left)
           break;
       }
@@ -208,8 +208,8 @@ struct Queue_worker : Request_processor
     for (;;)
       {
         chunk += buf->copy_to(&req);
-        if (req.done())
-          next();
+        if (req.done() && !next())
+          break;
         if (!buf->left)
           break;
       }
